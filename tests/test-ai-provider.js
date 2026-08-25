@@ -2,7 +2,7 @@ const assert = require('assert');
 
 function runTest(name, envSetup, expectedProvider, expectedModel, expectedBaseUrl) {
   // Clear env and cached modules
-  delete process.env.AI_PROVIDER;
+  process.env.AI_PROVIDER = envSetup.AI_PROVIDER || '';
   delete process.env.OPENROUTER_ENABLED;
   delete process.env.NVIDIA_ENABLED;
   delete process.env.OPENROUTER_API_KEY;
