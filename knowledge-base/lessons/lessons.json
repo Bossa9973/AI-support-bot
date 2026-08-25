@@ -62,5 +62,9 @@
   "Paid VPS Plan Inquiry": {
     "fact": "Vertex Deployments offers paid VPS plans with varying resources and capabilities, including unmetered network bandwidth and 24/7 continuous uptime.",
     "updatedAt": "2026-08-25T12:25:55.989Z"
+  },
+  "VPS Plan Inquiry": {
+    "fact": "Users may not provide sufficient information when inquiring about VPS plans",
+    "updatedAt": "2026-08-25T13:15:01.868Z"
   }
 }

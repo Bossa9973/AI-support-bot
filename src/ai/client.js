@@ -30,6 +30,80 @@ function getClient() {
 }
 
 /**
+ * Intelligent completion helper that:
+ * 1. Enforces dynamic max_tokens (defaults to 500-600 to prevent credit exhaustion)
+ * 2. Catches OpenRouter 402 "can only afford X tokens" errors and automatically retries with affordable token limits
+ * 3. Falls back to free models if balance is 0 or paid model is blocked
+ * 4. Retries automatically on rate limits (429/529/503/502)
+ */
+async function createChatCompletion(params, options = {}) {
+  const client = getClient();
+  if (!client) throw new Error('AI client not initialized (missing API key)');
+
+  const defaultMax = parseInt(config.ai.maxTokens || '600', 10);
+  let requestParams = {
+    ...params,
+    model: params.model || config.ai.model,
+    max_tokens: params.max_tokens ? Math.min(params.max_tokens, defaultMax) : defaultMax
+  };
+
+  const context = options.context || 'AI';
+  const maxAttempts = options.maxAttempts || 3;
+  let delay = 1000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await client.chat.completions.create(requestParams);
+    } catch (err) {
+      const status = err?.status || err?.code || (err?.response ? err.response.status : 0);
+      const errMsg = err?.message || JSON.stringify(err?.response?.data || '');
+
+      // ─── 1. HANDLE 402 INSUFFICIENT CREDITS / MAX_TOKENS LIMIT ────────────────
+      if (status === 402 || errMsg.includes('402') || errMsg.includes('requires more credits') || errMsg.includes('fewer max_tokens')) {
+        const affordMatch = errMsg.match(/can only afford (\d+)/i) || errMsg.match(/afford up to (\d+)/i);
+        if (affordMatch) {
+          const rawAffordable = parseInt(affordMatch[1], 10);
+          const safeAffordable = Math.max(40, rawAffordable - 10);
+          console.warn(`[${context}] ⚠️ OpenRouter credit limit reached. Auto-adjusting max_tokens from ${requestParams.max_tokens} down to ${safeAffordable} and retrying...`);
+          requestParams.max_tokens = safeAffordable;
+          continue;
+        }
+
+        // If credits are 0 or cannot afford on paid model, switch to fallback free model
+        const fallbackModel = config.ai.fallbackModel || 'meta-llama/llama-3.3-70b-instruct:free';
+        if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
+          console.warn(`[${context}] ⚠️ OpenRouter paid model credit exhausted. Automatically falling back to free model (${fallbackModel})...`);
+          requestParams.model = fallbackModel;
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 500, 500);
+          continue;
+        }
+      }
+
+      // ─── 2. HANDLE 429 / 529 / 503 / 502 RATE LIMITS & OVERLOADS ──────────────
+      const isRetryable =
+        status === 429 ||
+        status === 529 ||
+        status === 503 ||
+        status === 502 ||
+        errMsg.includes('429') ||
+        errMsg.includes('529') ||
+        errMsg.includes('overloaded');
+
+      if (isRetryable && attempt < maxAttempts) {
+        const retryAfter = parseInt(err?.response?.headers?.['retry-after'] || '0', 10);
+        const waitMs = retryAfter > 0 ? retryAfter * 1000 : delay;
+        console.warn(`[${context}] ${status || 'Overload/Rate-limit'} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts})`);
+        await new Promise(r => setTimeout(r, waitMs));
+        delay *= 2;
+        continue;
+      }
+
+      throw err;
+    }
+  }
+}
+
+/**
  * Wraps an AI API call with automatic exponential retry on 429/529/503/502 rate-limit or overload errors.
  */
 async function withRetry(fn, maxAttempts = 3, context = 'AI') {
@@ -101,6 +175,7 @@ function buildUserContent(text, imageUrls = []) {
 module.exports = {
   getClient,
   withRetry,
+  createChatCompletion,
   warmupConnection,
   buildUserContent,
   getActiveProvider: () => config.ai

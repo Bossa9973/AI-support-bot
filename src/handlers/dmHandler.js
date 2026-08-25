@@ -3,7 +3,7 @@ const config = require('../config');
 const knowledgeManager = require('../ai/knowledgeManager');
 const { answerSuggestionQuestion } = require('../ai/selfLearning');
 const db = require('../database/db');
-const { getClient, withRetry } = require('../ai/client');
+const { getClient, withRetry, createChatCompletion } = require('../ai/client');
 
 /**
  * Formats recent Discord channel messages into an OpenAI-compatible messages array,
@@ -225,12 +225,12 @@ Always place your final JSON object inside \`\`\`json ... \`\`\` at the end of y
   }
 
   try {
-    const response = await withRetry(() => client.chat.completions.create({
+    const response = await createChatCompletion({
       model: config.ai.model,
       messages,
       temperature: 0.2,
-      max_tokens: 2000
-    }));
+      max_tokens: Math.min(config.ai.maxTokens ? config.ai.maxTokens * 2 : 1000, 1000)
+    }, { context: 'OwnerDM' });
 
     const reply = response.choices?.[0]?.message?.content || '';
 

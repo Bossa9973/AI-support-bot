@@ -2,7 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const config = require('../config');
 const db = require('../database/db');
 const knowledgeManager = require('./knowledgeManager');
-const { getClient, withRetry } = require('./client');
+const { getClient, withRetry, createChatCompletion } = require('./client');
 
 /**
  * Generates a short unique suggestion ID like SUGG-A3B2
@@ -130,15 +130,15 @@ If no action needed:
 }`;
 
   try {
-    const response = await withRetry(() => client.chat.completions.create({
-      model: config.openRouter.model || 'stealth/ox-alpha',
+    const response = await createChatCompletion({
+      model: config.ai.model,
       messages: [
         { role: 'system', content: prompt },
         { role: 'user', content: 'Inspect this ticket transcript and output your JSON evaluation.' }
       ],
       temperature: 0.3,
-      max_tokens: 1500
-    }));
+      max_tokens: 600
+    }, { context: 'SelfLearning:InspectTranscript' });
 
     const raw = response.choices?.[0]?.message?.content || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -362,8 +362,8 @@ async function answerSuggestionQuestion(suggestion, ownerQuestion) {
       ? `Title: ${suggestion.title}\nCategory: ${suggestion.category}\nContent: ${suggestion.content}`
       : `Key: ${suggestion.key}\nFact: ${suggestion.fact}`;
 
-    const response = await withRetry(() => client.chat.completions.create({
-      model: config.openRouter.model || 'stealth/ox-alpha',
+    const response = await createChatCompletion({
+      model: config.ai.model,
       messages: [
         {
           role: 'system',
@@ -372,8 +372,8 @@ async function answerSuggestionQuestion(suggestion, ownerQuestion) {
         { role: 'user', content: ownerQuestion }
       ],
       temperature: 0.3,
-      max_tokens: 600
-    }));
+      max_tokens: 400
+    }, { context: 'SelfLearning:AnswerSuggestion' });
 
     return response.choices?.[0]?.message?.content?.trim() || "I couldn't generate a response.";
   } catch (err) {
@@ -433,15 +433,15 @@ RESPONSE FORMAT (JSON only):
   "sources": ["User support conversation"]
 }`;
 
-    const response = await withRetry(() => client.chat.completions.create({
-      model: config.openRouter.model || 'stealth/ox-alpha',
+    const response = await createChatCompletion({
+      model: config.ai.model,
       messages: [
         { role: 'system', content: prompt },
         { role: 'user', content: context || userQuery }
       ],
       temperature: 0.3,
-      max_tokens: 1500
-    }));
+      max_tokens: 600
+    }, { context: 'SelfLearning:CheckAndLearn' });
 
     const raw = response.choices?.[0]?.message?.content || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);

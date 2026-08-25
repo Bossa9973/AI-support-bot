@@ -1,5 +1,5 @@
 const config = require('../config');
-const { getClient, withRetry, warmupConnection, buildUserContent } = require('./client');
+const { getClient, withRetry, createChatCompletion, warmupConnection, buildUserContent } = require('./client');
 const { getKnowledgeContext, getFocusedKnowledgeContext } = require('./knowledgeBase');
 
 // ─── STATIC PROMPT PREFIX CACHE ───────────────────────────────────────────────
@@ -397,12 +397,12 @@ User: @${username}`;
     messages.push({ role: 'user', content: buildUserContent(userQuery, imageUrls) });
 
     try {
-      const response = await withRetry(() => client.chat.completions.create({
-        model: config.openRouter.model || 'stealth/ox-alpha',
+      const response = await createChatCompletion({
+        model: config.ai.model,
         messages,
         temperature: 0.3,
-        max_tokens: 500
-      }));
+        max_tokens: 450
+      }, { context: `${config.ai.providerName}:HoldingMode` });
 
       const rawReply = response.choices?.[0]?.message?.content || '';
       const repingMatch = rawReply.match(/\[REPING\][\s\S]*?\[\/REPING\]/i);
@@ -456,12 +456,12 @@ User: @${username}`;
   messages.push({ role: 'user', content: buildUserContent(userQuery, imageUrls) });
 
   try {
-    const response = await withRetry(() => client.chat.completions.create({
+    const response = await createChatCompletion({
       model: config.ai.model,
       messages,
       temperature: 0.4,
-      max_tokens: 1200
-    }));
+      max_tokens: config.ai.maxTokens || 600
+    }, { context: `${config.ai.providerName}:Standard` });
 
     const rawReply = response.choices?.[0]?.message?.content || '';
     if (!rawReply.trim()) {

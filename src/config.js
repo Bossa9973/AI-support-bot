@@ -48,6 +48,9 @@ if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
   }
 }
 
+const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '600', 10);
+const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct:free' : 'meta/llama-3.3-70b-instruct');
+
 const activeAIConfig = selectedProvider === 'nvidia'
   ? {
       provider: 'nvidia',
@@ -55,6 +58,8 @@ const activeAIConfig = selectedProvider === 'nvidia'
       apiKey: nvidiaConfig.apiKey,
       model: nvidiaConfig.model,
       baseURL: nvidiaConfig.baseURL,
+      maxTokens,
+      fallbackModel,
       defaultHeaders: {}
     }
   : {
@@ -63,6 +68,8 @@ const activeAIConfig = selectedProvider === 'nvidia'
       apiKey: openRouterConfig.apiKey,
       model: openRouterConfig.model,
       baseURL: openRouterConfig.baseURL,
+      maxTokens,
+      fallbackModel,
       defaultHeaders: {
         'HTTP-Referer': openRouterConfig.siteUrl,
         'X-Title': openRouterConfig.siteName
