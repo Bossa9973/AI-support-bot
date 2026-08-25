@@ -71,41 +71,9 @@ module.exports = {
     const isTicketCreator = ticket.userId === message.author.id;
     const isStaff = isStaffMember(message.member);
 
-    // 3. Staff / Admin Message (Implicit Takeover)
-    // When staff sends a message in a user's ticket, claim it and stop AI
-    if (isStaff && !isTicketCreator) {
-      if (ticket.claimedBy !== message.author.id) {
-        db.claimTicket(message.channel.id, message.author.id);
-        db.updateTicket(message.channel.id, { continueWithAi: false });
-
-        const transferBtn = new ButtonBuilder()
-          .setCustomId('ticket_transfer')
-          .setLabel('Transfer Ticket')
-          .setEmoji('🔄')
-          .setStyle(ButtonStyle.Secondary);
-
-        const closeBtn = new ButtonBuilder()
-          .setCustomId('ticket_close_request')
-          .setLabel('Close')
-          .setEmoji('🔒')
-          .setStyle(ButtonStyle.Danger);
-
-        const row = new ActionRowBuilder().addComponents(transferBtn, closeBtn);
-
-        await message.channel.send({
-          content: `🙋‍♂️ **Staff Takeover**: <@${message.author.id}> has joined the ticket and will be assisting directly.`,
-          components: [row]
-        }).catch(console.error);
-      }
-      // AI stops responding to staff messages
+    // 3. If ticket is explicitly claimed by staff with AI paused, staff's own messages don't trigger AI replies
+    if (ticket.claimedBy && ticket.continueWithAi === false && message.author.id === ticket.claimedBy) {
       return;
-    }
-
-    // 4. If ticket is claimed by a staff member (and continueWithAi is false), AI stops replying unless directly tagged
-    if (ticket.claimedBy && !ticket.continueWithAi) {
-      if (!message.mentions.has(message.client.user)) {
-        return;
-      }
     }
 
     // Clear any pending inactivity auto-close timer since the user is actively messaging
@@ -136,16 +104,32 @@ module.exports = {
 
       // Pre-fetch history immediately (runs in parallel while waiting for queue slot)
       const historyPromise = message.channel && message.channel.messages
-        ? message.channel.messages.fetch({ limit: 8 }).then((fetchedMessages) => {
+        ? message.channel.messages.fetch({ limit: 12 }).then((fetchedMessages) => {
             const history = [];
             const sorted = Array.from(fetchedMessages.values()).sort(
               (a, b) => a.createdTimestamp - b.createdTimestamp
             );
             for (const msg of sorted) {
               if (msg.id === message.id) continue;
-              if (!msg.content && msg.author.id !== message.client.user.id) continue;
-              const role = msg.author.id === message.client.user.id ? 'assistant' : 'user';
-              history.push({ role, content: `${msg.author.username}: ${msg.content || '[sent an attachment]'}` });
+              const isBot = msg.author.id === message.client.user.id;
+              const role = isBot ? 'assistant' : 'user';
+
+              let text = msg.content || '';
+              if (msg.embeds && msg.embeds.length > 0) {
+                const embLines = [];
+                for (const emb of msg.embeds) {
+                  if (emb.title) embLines.push(`[Embed Title: ${emb.title}]`);
+                  if (emb.description) embLines.push(`[Embed Description: ${emb.description}]`);
+                  if (emb.fields && emb.fields.length > 0) {
+                    for (const f of emb.fields) embLines.push(`[${f.name}: ${f.value}]`);
+                  }
+                }
+                if (embLines.length > 0) {
+                  text += (text ? '\n' : '') + embLines.join('\n');
+                }
+              }
+              if (!text.trim()) continue;
+              history.push({ role, content: `${msg.author.username}: ${text.trim()}` });
             }
             return history;
           }).catch(() => [])
@@ -186,10 +170,16 @@ module.exports = {
           const fullUserQuery = (message.content || '') + inlineText;
 
           // 6c. Build ticket state
+          const ticketCategory = ticket.category || 'general_support';
+          const ticketCategoryData = embedBuilder.getCategoryData(ticketCategory);
+
           const ticketState = {
             escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
             priority: ticket.priority || 'green',
-            lastSummary: ticket.lastSummary || ''
+            lastSummary: ticket.lastSummary || '',
+            category: ticketCategory,
+            categoryLabel: ticketCategoryData.label,
+            categoryDescription: ticketCategoryData.description
           };
 
           const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');

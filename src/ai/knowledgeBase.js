@@ -129,11 +129,22 @@ function getKnowledgeContext(forceRefresh = false) {
   return _cachedFullContext;
 }
 
+const TICKET_CATEGORY_FOLDER_MAPPING = {
+  purchase_vps: ['vps-plans', 'vps-billing', 'billing-and-reseller', 'reseller-program', 'hosting-features'],
+  account_issue: ['dashboard-maintenance', 'vps-management', 'admin-operations'],
+  report_bug: ['known-issues', 'dashboard-maintenance', 'vps-management', 'admin-operations'],
+  technical_questions: ['vps-management', 'hosting-features', 'known-issues', 'discord-bots'],
+  general_support: ['vps-management', 'dashboard-maintenance', 'vps-plans', 'hosting-features'],
+  general_question: ['hosting-features', 'service-quality', 'vps-plans', 'giveaway-rules'],
+  claim_giveaway: ['rewards-and-claims', 'reward-claiming', 'giveaway-rules', 'boost-rewards', 'bolts-rewards', 'invites']
+};
+
 /**
- * Returns a fast, focused knowledge context (top 3 articles max) to maximize response speed.
+ * Returns a fast, focused knowledge context (top articles prioritized by query & ticket category).
  */
-function getFocusedKnowledgeContext(query = '', maxArticles = 3) {
+function getFocusedKnowledgeContext(query = '', maxArticles = 5, ticketCategory = '') {
   const keywords = extractKeywords(query);
+  const preferredFolders = TICKET_CATEGORY_FOLDER_MAPPING[ticketCategory] || [];
   let context = '';
 
   // 1. Overrides
@@ -150,24 +161,29 @@ function getFocusedKnowledgeContext(query = '', maxArticles = 3) {
   const lessons = knowledgeManager.getLessons();
   const lessonKeys = Object.keys(lessons);
   if (lessonKeys.length > 0) {
-    context += `--- LESSONS ---\n`;
+    context += `--- FAST LESSONS & ATOMIC FACTS ---\n`;
     for (const key of lessonKeys) {
       context += `• ${key}: ${lessons[key].fact}\n`;
     }
     context += `--- END LESSONS ---\n\n`;
   }
 
-  // 3. Score and select top articles (zero disk latency from memory cache)
+  // 3. Score and select top articles with category-affinity boosting
   const articlesByCategory = knowledgeManager.listArticles();
   const scoredArticles = [];
 
   for (const cat of Object.keys(articlesByCategory)) {
+    const isPreferredCategory = preferredFolders.includes(cat);
+    const categoryBoost = isPreferredCategory ? 4 : 0;
+
     for (const art of articlesByCategory[cat]) {
       const content = knowledgeManager.getArticle(cat, art.slug);
       if (!content) continue;
-      const score = keywords.length > 0 ? scoreArticle(content, keywords) : 1;
-      if (score > 0) {
-        scoredArticles.push({ cat, art, content, score });
+      const baseScore = keywords.length > 0 ? scoreArticle(content, keywords) : 1;
+      const finalScore = baseScore + categoryBoost;
+
+      if (finalScore > 0) {
+        scoredArticles.push({ cat, art, content, score: finalScore });
       }
     }
   }
@@ -176,11 +192,11 @@ function getFocusedKnowledgeContext(query = '', maxArticles = 3) {
   const selected = scoredArticles.slice(0, maxArticles);
 
   if (selected.length > 0) {
-    context += `--- RELEVANT ARTICLES ---\n`;
+    context += `--- RELEVANT KNOWLEDGE ARTICLES ---\n`;
     for (const { cat, art, content } of selected) {
       const trimmed = content.trim();
-      const snippet = trimmed.length > 5000 ? trimmed.slice(0, 5000) + '\n...' : trimmed;
-      context += `\n[${cat.toUpperCase()}] ${art.title}\n${snippet}\n`;
+      const snippet = trimmed.length > 4000 ? trimmed.slice(0, 4000) + '\n...' : trimmed;
+      context += `\n[CATEGORY: ${cat.toUpperCase()}] ${art.title}\n${snippet}\n`;
     }
     context += `--- END ARTICLES ---\n\n`;
   }
@@ -191,5 +207,6 @@ function getFocusedKnowledgeContext(query = '', maxArticles = 3) {
 module.exports = {
   getKnowledgeContext,
   getFocusedKnowledgeContext,
-  invalidateContextCache
+  invalidateContextCache,
+  TICKET_CATEGORY_FOLDER_MAPPING
 };

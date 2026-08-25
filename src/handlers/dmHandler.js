@@ -337,19 +337,24 @@ module.exports = {
 
     // 2. Direct Shortcuts / Fast Commands
     // 2a. List pending drafts
+    // 2a. List pending drafts
     if (content.toLowerCase() === '!drafts' || content.toLowerCase() === 'drafts') {
       const pendingDrafts = db.listPendingDrafts();
       if (pendingDrafts.length === 0) {
         return message.reply('No active pending drafts right now, Boss!');
       }
       const lines = pendingDrafts.map(d => {
-        return `**\`${d.id}\`** — **${(d.type || 'draft').toUpperCase()}**: ${d.title || d.key || d.directive}\n> *${d.changesSummary || 'Draft waiting for review'}*`;
+        return `• **\`${d.id}\`** — **${(d.type || 'draft').toUpperCase()}**: \`${d.title || d.key || d.directive}\`\n  > *${d.changesSummary || 'Draft waiting for review'}*`;
       });
       const embed = new EmbedBuilder()
         .setColor('#5865F2')
-        .setTitle(`📝 Pending Draft Proposals (${pendingDrafts.length})`)
-        .setDescription(lines.join('\n\n').slice(0, 4000))
-        .setFooter({ text: 'Reply with your changes to refine a draft, or click Accept on the draft embed.' });
+        .setTitle(`📝 Pending Knowledge Draft Proposals (${pendingDrafts.length})`)
+        .setDescription(
+          `Review the pending proposals below. You can accept them directly via their embeds or reply with instructions to adjust them.\n\n` +
+          lines.join('\n\n').slice(0, 3900)
+        )
+        .setFooter({ text: 'Reply with your changes to refine a draft, or click Accept & Publish on the draft card.' })
+        .setTimestamp();
       return message.reply({ embeds: [embed] });
     }
 
@@ -360,14 +365,18 @@ module.exports = {
         return message.reply('No pending self-learning suggestions right now.');
       }
       const lines = pending.map(s => {
-        const label = s.type === 'lesson' ? `💡 Lesson: \`${s.key}\`` : `📖 Article: **${s.title}** (${s.category})`;
-        return `**\`${s.id}\`** — ${label}\n> ${s.triggerQuery.slice(0, 80)}...`;
+        const label = s.type === 'lesson' ? `💡 **Lesson**: \`${s.key}\`` : `📖 **Article**: **${s.title}** (\`${s.category}\`)`;
+        return `• **\`${s.id}\`** — ${label}\n  > ${s.triggerQuery.slice(0, 100)}...`;
       });
       const embed = new EmbedBuilder()
         .setColor('#FEE75C')
-        .setTitle(`🧠 Pending Self-Learning Suggestions (${pending.length})`)
-        .setDescription(lines.join('\n\n').slice(0, 4000))
-        .setFooter({ text: 'Reply with "SUGG-XXXX <your question>" or give instructions in natural language.' });
+        .setTitle(`🧠 Self-Learning Suggestions Queue (${pending.length})`)
+        .setDescription(
+          `These items were generated automatically from ticket solutions:\n\n` +
+          lines.join('\n\n').slice(0, 3900)
+        )
+        .setFooter({ text: 'Reply with "SUGG-XXXX <question>" or teach in natural language.' })
+        .setTimestamp();
       return message.reply({ embeds: [embed] });
     }
 
@@ -379,13 +388,17 @@ module.exports = {
       }
       const lines = pendingQuestions.map(q => {
         const ticketNumStr = q.ticketNumber ? `#${String(q.ticketNumber).padStart(4, '0')}` : 'Live';
-        return `**\`${q.id}\`** — **${q.topic}** (Ticket ${ticketNumStr})\n> **Q:** ${q.question}\n> **User:** *${(q.userQuery || '').slice(0, 60)}...*`;
+        return `• **\`${q.id}\`** — **${q.topic}** (Ticket ${ticketNumStr})\n  > **Q:** *${q.question}*\n  > **User:** "${(q.userQuery || '').slice(0, 75)}..."`;
       });
       const embed = new EmbedBuilder()
         .setColor('#9B59B6')
-        .setTitle(`❓ Knowledge Questions Awaiting Your Clarification (${pendingQuestions.length})`)
-        .setDescription(lines.join('\n\n').slice(0, 4000))
-        .setFooter({ text: 'Reply directly in natural language to answer and drop a draft!' });
+        .setTitle(`❓ Knowledge Questions Awaiting Clarification (${pendingQuestions.length})`)
+        .setDescription(
+          `The AI encountered these undocumented topics in tickets:\n\n` +
+          lines.join('\n\n').slice(0, 3900)
+        )
+        .setFooter({ text: 'Reply directly to answer and automatically generate a live draft proposal!' })
+        .setTimestamp();
       return message.reply({ embeds: [embed] });
     }
 
@@ -403,14 +416,15 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor('#57F287')
-        .setTitle(`💡 Learned from Gap Clarification [${gapId}]`)
-        .setDescription(`I have saved your answer to my atomic knowledge library and resolved question \`${gapId}\`.`)
+        .setTitle(`💡 Knowledge Gap Resolved • [${gapId}]`)
+        .setDescription(`I have saved your answer to my atomic knowledge library and marked question \`${gapId}\` as resolved.`)
         .addFields([
-          { name: '🔑 Topic / Key', value: saved.key, inline: true },
-          { name: '📝 Learned Fact', value: saved.fact, inline: false }
-        ]);
+          { name: '🔑 Topic Key', value: `\`${saved.key}\``, inline: true },
+          { name: '📝 Learned Fact', value: `> ${saved.fact}`, inline: false }
+        ])
+        .setTimestamp();
 
-      return message.reply({ content: `Understood, Boss! I've updated my knowledge base with your answer.`, embeds: [embed] });
+      return message.reply({ embeds: [embed] });
     }
 
     // 2e. Owner asking a question about a specific suggestion shortcut: "SUGG-XXXX what sources did you use?"
@@ -428,35 +442,55 @@ module.exports = {
       const answer = await answerSuggestionQuestion(suggestion, question);
       const embed = new EmbedBuilder()
         .setColor('#FEE75C')
-        .setTitle(`🧠 \`${suggId}\` — Your Question`)
-        .setDescription(`**Q:** ${question}\n\n**A:** ${answer}`);
+        .setTitle(`🧠 Suggestion Analysis • \`${suggId}\``)
+        .setDescription(`**Inquiry:** ${question}\n\n**Response:**\n${answer}`)
+        .setTimestamp();
       return message.reply({ embeds: [embed] });
     }
 
     if (content.toLowerCase() === '!help' || content.toLowerCase() === 'help') {
       const helpEmbed = new EmbedBuilder()
         .setColor('#5865F2')
-        .setTitle('👑 Boss Executive Control Center')
-        .setDescription('You can manage my entire knowledge base, review drafts, set live overrides, and train me in natural language right here in DMs!')
+        .setTitle('👑 Boss Executive Knowledge & Control Center')
+        .setDescription(
+          'Manage the bot\'s knowledge base, review drafts, set live emergency overrides, and teach platform rules directly in natural language.'
+        )
         .addFields([
           {
             name: '📝 Interactive Drafts & Iterative Feedback',
-            value: '• Whenever you teach me or answer a gap, I will drop an **interactive draft preview** with `[Accept & Save]` and `[Decline]` buttons.\n• Give more instructions anytime (e.g. *"also add X"*, *"change category to billing"*), and I will update the draft live!'
+            value: [
+              '• Whenever you teach me or clarify a gap, I will post an **interactive draft card** with `[Accept & Publish]` and `[Discard]` buttons.',
+              '• Give additional natural language commands anytime (*"also mention port range 25565-25600"*, *"change category to vps-management"*), and the draft will update dynamically.'
+            ].join('\n')
           },
           {
-            name: '❓ Knowledge Gaps & Questions',
-            value: '• When I lack documentation in a ticket, I DM you here.\n• *"!gaps"* — List unanswered questions\n• Answer naturally: *"For that NAT question, free gets 5 ports, paid gets 20"*\n• I will automatically drop the prepared draft for your approval.'
+            name: '❓ Knowledge Gaps & Ticket Questions',
+            value: [
+              '• When the AI lacks documentation during a ticket, you will receive an alert in DMs.',
+              '• `!gaps` — View all pending knowledge gap questions.',
+              '• Reply naturally: *"For NAT routing, free plans get 5 ports and paid plans get 20 ports"* to generate an instant draft.'
+            ].join('\n')
           },
           {
-            name: '🚨 Live Overrides (Emergency Hotfixes)',
-            value: '• *"Feature A is down, tell users to use console"*\n• *"Dallas node is under maintenance"*\n• *"Clear override 1"* or *"Clear all overrides"*'
+            name: '🚨 Live Emergency Overrides',
+            value: [
+              '• *"Dallas node is under maintenance, tell users to wait for announcement"*',
+              '• *"Billing portal is having issues, route payments to staff"*',
+              '• *"Clear override 1"* or *"Clear all overrides"*'
+            ].join('\n')
           },
           {
-            name: '📚 Fast Shortcuts',
-            value: '• `!drafts` — View pending drafts\n• `!gaps` — View pending ticket questions\n• `!suggestions` — View self-learning suggestions\n• `!knowledge` or *"list articles"* — View entire knowledge catalog'
+            name: '📚 Navigation & Quick Commands',
+            value: [
+              '• `!drafts` — Review active proposal drafts',
+              '• `!gaps` — Review pending ticket gap questions',
+              '• `!suggestions` — Review ticket self-learning proposals',
+              '• `!knowledge` or `list articles` — Explore full knowledge base catalog'
+            ].join('\n')
           }
         ])
-        .setFooter({ text: 'Vertex AI Support Assistant • Full Natural Language Memory' });
+        .setFooter({ text: 'AI Support Assistant • Natural Language Management' })
+        .setTimestamp();
 
       return message.reply({ embeds: [helpEmbed] });
     }
@@ -500,55 +534,60 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(isArticle ? '#5865F2' : isLesson ? '#57F287' : '#ED4245')
-        .setTitle(`📝 Draft Proposal [${draft.id}] — ${draft.title || draft.key || 'Directive'}`)
+        .setTitle(`📝 Draft Proposal • [${draft.id}] — ${draft.title || draft.key || 'Directive'}`)
         .setDescription(
-          `Here is the updated version based on your instructions. Click **Accept & Save** to publish it live, or give more instructions to refine it.`
+          `Here is the latest version prepared from your instructions.\n` +
+          `Click **Accept & Publish** to save it live into the knowledge base, or reply with adjustments to refine it.`
         )
         .addFields([
-          { name: '📌 Type', value: `\`${draft.type.toUpperCase()}\``, inline: true },
+          { name: '📌 Format Type', value: `\`${draft.type.toUpperCase()}\``, inline: true },
           { name: '🏷️ Draft ID', value: `\`${draft.id}\``, inline: true },
-          { name: '🔄 Changes / Focus', value: `> ${draft.changesSummary}`, inline: false }
+          { name: '🔄 Focus / Changes', value: `> ${draft.changesSummary}`, inline: false }
         ]);
 
       if (isArticle) {
         embed.addFields([
-          { name: '📂 Category', value: `\`${draft.category}\``, inline: true },
-          { name: '📄 Target File', value: `\`${draft.category}/${draft.slug || 'article'}.md\``, inline: true },
+          { name: '📂 Target Category', value: `\`${draft.category}\``, inline: true },
+          { name: '📄 File Path', value: `\`${draft.category}/${draft.slug || 'article'}.md\``, inline: true },
           {
-            name: '📑 Article Content Preview',
+            name: '📑 Content Preview',
             value: '```markdown\n' + (draft.content || '').slice(0, 1000) + ((draft.content || '').length > 1000 ? '\n...(preview truncated)' : '') + '\n```',
             inline: false
           }
         ]);
       } else if (isLesson) {
         embed.addFields([
-          { name: '🔑 Topic / Key', value: `\`${draft.key}\``, inline: true },
-          { name: '📝 Learned Fact', value: draft.fact || '', inline: false }
+          { name: '🔑 Topic Key', value: `\`${draft.key}\``, inline: true },
+          { name: '📝 Atomic Fact', value: `> ${draft.fact || ''}`, inline: false }
         ]);
       } else if (isOverride) {
         embed.addFields([
-          { name: '🚨 Directive', value: draft.directive || '', inline: false }
+          { name: '🚨 Directive', value: `> ${draft.directive || ''}`, inline: false }
         ]);
       }
 
       if (draft.gapId) {
-        embed.addFields([{ name: '❓ Resolves Knowledge Gap', value: `\`${draft.gapId}\``, inline: true }]);
+        embed.addFields([{ name: '❓ Resolves Gap', value: `\`${draft.gapId}\``, inline: true }]);
       }
+
+      embed.setTimestamp();
 
       const acceptBtn = new ButtonBuilder()
         .setCustomId(`dm_accept_draft_${draft.id}`)
-        .setLabel('✅ Accept & Save')
+        .setLabel('Accept & Publish')
+        .setEmoji('✅')
         .setStyle(ButtonStyle.Success);
 
       const declineBtn = new ButtonBuilder()
         .setCustomId(`dm_decline_draft_${draft.id}`)
-        .setLabel('❌ Decline')
+        .setLabel('Discard Draft')
+        .setEmoji('❌')
         .setStyle(ButtonStyle.Danger);
 
       const row = new ActionRowBuilder().addComponents(acceptBtn, declineBtn);
 
       return message.reply({
-        content: result.bossMessage || `I've updated the draft below. Click **Accept & Save** to publish it.`,
+        content: result.bossMessage || `I've prepared the draft proposal below. Click **Accept & Publish** when you're ready!`,
         embeds: [embed],
         components: [row]
       });
@@ -566,18 +605,19 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#57F287')
         .setTitle(`📖 Article Published: ${saved.title}`)
-        .setDescription(`Successfully saved to knowledge base and activated for all ticket responses.`)
+        .setDescription(`Successfully saved to the knowledge base and activated for all ticket responses.`)
         .addFields([
           { name: '📂 Category', value: `\`${saved.category}\``, inline: true },
           { name: '📄 File Path', value: `\`${saved.category}/${saved.slug}.md\``, inline: true },
-          { name: '📑 Content Preview', value: '```markdown\n' + (result.content || '').slice(0, 400) + '...\n```', inline: false }
-        ]);
+          { name: '📑 Content Snippet', value: '```markdown\n' + (result.content || '').slice(0, 400) + '...\n```', inline: false }
+        ])
+        .setTimestamp();
 
       if (result.gapId) {
         embed.setFooter({ text: `Resolved Knowledge Gap ${result.gapId}` });
       }
 
-      return message.reply({ content: result.bossMessage || 'Article saved and live in knowledge base, Boss!', embeds: [embed] });
+      return message.reply({ content: result.bossMessage || 'Article saved and active in the knowledge base, Boss!', embeds: [embed] });
     }
 
     // 5c. SAVE_LESSON (Immediate Fact Save)
@@ -592,11 +632,12 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#57F287')
         .setTitle('💡 New Lesson Learned')
-        .setDescription(`Saved atomic fact to memory. This is now active in AI context.`)
+        .setDescription(`Saved atomic fact to memory. This is now active in AI context across all tickets.`)
         .addFields([
-          { name: '🔑 Topic / Key', value: saved.key, inline: true },
-          { name: '📝 Atomic Fact', value: saved.fact, inline: false }
-        ]);
+          { name: '🔑 Topic Key', value: `\`${saved.key}\``, inline: true },
+          { name: '📝 Atomic Fact', value: `> ${saved.fact}`, inline: false }
+        ])
+        .setTimestamp();
 
       if (result.gapId) {
         embed.setFooter({ text: `Resolved Knowledge Gap ${result.gapId}` });
@@ -610,13 +651,14 @@ module.exports = {
       const newOverride = knowledgeManager.addOverride(result.directive, result.reason || 'Set via Owner DM');
       const embed = new EmbedBuilder()
         .setColor('#ED4245')
-        .setTitle('🚨 Active Boss Directive Enacted')
+        .setTitle('🚨 Active Executive Directive Enacted')
         .setDescription(`**Directive**: ${newOverride.directive}`)
         .addFields([
           { name: '🆔 Override ID', value: `\`${newOverride.id}\``, inline: true },
-          { name: '⚡ Priority', value: 'Highest (Active across all tickets)', inline: true }
+          { name: '⚡ Priority Level', value: '`Critical (Active across all tickets)`', inline: true }
         ])
-        .setFooter({ text: 'Use "Clear override" when this is no longer applicable' });
+        .setFooter({ text: 'Use "Clear override" when this condition is resolved.' })
+        .setTimestamp();
 
       return message.reply({ content: result.bossMessage || 'Directive active!', embeds: [embed] });
     }
@@ -625,11 +667,21 @@ module.exports = {
     if (result.action === 'REMOVE_OVERRIDE') {
       if (result.clearAll) {
         knowledgeManager.clearAllOverrides();
-        return message.reply({ content: '✅ All active overrides have been cleared, Boss!' });
+        const clearEmbed = new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('✅ All Overrides Cleared')
+          .setDescription('All active overrides have been removed. Standard protocol resumed.')
+          .setTimestamp();
+        return message.reply({ embeds: [clearEmbed] });
       }
       const removed = knowledgeManager.removeOverride(result.overrideId || result.id || '1');
       if (removed) {
-        return message.reply({ content: `✅ Override successfully cleared. I have resumed standard protocol, Boss!` });
+        const clearEmbed = new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('✅ Override Cleared')
+          .setDescription('The specified directive was removed. Standard AI responses resumed.')
+          .setTimestamp();
+        return message.reply({ embeds: [clearEmbed] });
       } else {
         return message.reply({ content: `⚠️ Could not find that override ID. Current overrides:\n\`\`\`json\n${JSON.stringify(knowledgeManager.getOverrides(), null, 2)}\n\`\`\`` });
       }
@@ -641,14 +693,24 @@ module.exports = {
       if (targetId) {
         db.rejectDraft(targetId);
       }
-      return message.reply({ content: result.bossMessage || `Draft \`${targetId || 'active'}\` has been discarded.` });
+      const discardEmbed = new EmbedBuilder()
+        .setColor('#ED4245')
+        .setTitle('🗑️ Draft Discarded')
+        .setDescription(`Draft proposal \`${targetId || 'active'}\` has been discarded.\nNo changes were made to the knowledge base.`)
+        .setTimestamp();
+      return message.reply({ embeds: [discardEmbed] });
     }
 
     // 5g. DELETE_LESSON
     if (result.action === 'DELETE_LESSON') {
       const deleted = knowledgeManager.deleteLesson(result.key);
       if (deleted) {
-        return message.reply({ content: `✅ Lesson \`${result.key}\` has been removed from my memory.` });
+        const delEmbed = new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('🗑️ Lesson Removed')
+          .setDescription(`Lesson key \`${result.key}\` has been removed from active memory.`)
+          .setTimestamp();
+        return message.reply({ embeds: [delEmbed] });
       } else {
         return message.reply({ content: `⚠️ Could not find lesson with key \`${result.key}\`.` });
       }
@@ -658,7 +720,12 @@ module.exports = {
     if (result.action === 'DELETE_ARTICLE') {
       const deleted = knowledgeManager.deleteArticle(result.category, result.titleOrSlug || result.slug);
       if (deleted) {
-        return message.reply({ content: `✅ Article removed from category \`${result.category}\`.` });
+        const delEmbed = new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('🗑️ Article Removed')
+          .setDescription(`Article was removed from category \`${result.category}\`.`)
+          .setTimestamp();
+        return message.reply({ embeds: [delEmbed] });
       } else {
         return message.reply({ content: `⚠️ Could not find article in category \`${result.category}\`.` });
       }
@@ -671,7 +738,8 @@ module.exports = {
         const embed = new EmbedBuilder()
           .setColor('#5865F2')
           .setTitle(`📖 ${article.title} (\`${article.category}/${article.slug}.md\`)`)
-          .setDescription('```markdown\n' + article.content.slice(0, 3900) + '\n```');
+          .setDescription('```markdown\n' + article.content.slice(0, 3900) + '\n```')
+          .setTimestamp();
         return message.reply({ content: result.bossMessage || `Here is the requested article:`, embeds: [embed] });
       }
       return message.reply({ content: `⚠️ Could not find article matching "${result.slug || result.title}".` });
@@ -715,15 +783,20 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor('#5865F2')
-        .setTitle('📚 Current Knowledge Base Catalog')
-        .setDescription(`Total Categories: **${catKeys.length}** | Total Articles: **${totalArticles}** | Lessons: **${Object.keys(lessons).length}**`)
+        .setTitle('📚 Knowledge Base Catalog & Status')
+        .setDescription(
+          `**Platform Statistics:**\n` +
+          `• Categories: **${catKeys.length}** | Total Articles: **${totalArticles}** | Atomic Lessons: **${Object.keys(lessons).length}**`
+        )
         .addFields([
           { name: `🚨 Active Overrides (${overrides.length})`, value: overridesStr, inline: false },
           { name: `📝 Pending Draft Proposals (${pendingDrafts.length})`, value: draftsStr, inline: true },
           { name: `❓ Unresolved Ticket Gaps (${pendingGaps.length})`, value: gapsStr, inline: true },
           { name: `💡 Fast Lessons (${Object.keys(lessons).length})`, value: lessonsStr, inline: false },
-          { name: `📖 Categories & Articles`, value: articlesStr, inline: false }
-        ]);
+          { name: `📖 Categorized Articles`, value: articlesStr, inline: false }
+        ])
+        .setFooter({ text: 'Executive Knowledge System' })
+        .setTimestamp();
 
       return message.reply({ embeds: [embed] });
     }

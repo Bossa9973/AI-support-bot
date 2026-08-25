@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const db = require('../database/db');
+const embedBuilder = require('../utils/embedBuilder');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,7 +16,11 @@ module.exports = {
   async execute(interaction) {
     const ticket = db.getTicket(interaction.channel.id);
     if (!ticket) {
-      return interaction.reply({ content: '❌ This channel is not an active ticket.', ephemeral: true });
+      const errorEmbed = embedBuilder.createErrorEmbed(
+        'Invalid Ticket Channel',
+        'This command can only be used inside an active ticket channel.'
+      );
+      return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
     }
 
     const targetUser = interaction.options.getUser('user');
@@ -27,8 +32,11 @@ module.exports = {
       EmbedLinks: true
     });
 
-    await interaction.reply({
-      content: `✅ Successfully added <@${targetUser.id}> to this ticket.`
-    });
+    const successEmbed = embedBuilder.createSuccessEmbed(
+      'Member Added to Ticket',
+      `<@${targetUser.id}> has been granted access to this ticket by <@${interaction.user.id}>.`
+    );
+
+    await interaction.reply({ embeds: [successEmbed] });
   }
 };

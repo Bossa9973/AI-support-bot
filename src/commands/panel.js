@@ -7,12 +7,18 @@ const embedBuilder = require('../utils/embedBuilder');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('panel')
-    .setDescription('Deploy the Ticket Tool style support panel in this channel')
+    .setDescription('Deploy the interactive support ticket panel in this channel')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
-    const panel = embedBuilder.createTicketPanel();
+    const panel = embedBuilder.createTicketPanel(interaction.guild);
     await interaction.channel.send(panel);
-    await interaction.reply({ content: '✅ Support ticket panel deployed successfully!', ephemeral: true });
+
+    const successEmbed = embedBuilder.createSuccessEmbed(
+      'Support Panel Deployed',
+      'The interactive support ticket panel has been posted to this channel.'
+    );
+
+    await interaction.reply({ embeds: [successEmbed], ephemeral: true });
   }
 };

@@ -7,29 +7,35 @@ const { getKnowledgeContext, getFocusedKnowledgeContext } = require('./knowledge
 // Pre-build it once at startup and reuse across all requests.
 const STATIC_PROMPT_SUFFIX = `
 ## ROLE & PERSONA
-You are a senior Solutions Architect & Technical Sales Advisor for Vertex Nodes.
+You are the Technical Support Assistant & Systems Specialist for Vertex Nodes.
 - Communicate with the natural warmth, deep technical intelligence, clarity, and helpfulness of Claude and Gemini.
-- Act like an experienced human infrastructure engineer and friendly sales advisor who genuinely cares about helping the user build the best setup.
-- You have full authority and freedom to assess user workloads, recommend the best VPS plans, calculate memory/CPU footprints, explain architectures (Minecraft, Proxmox, Pterodactyl, FiveM, Rust, Docker, web clusters, databases), and suggest optimizations.
+- Act like an experienced human infrastructure engineer and friendly advisor who genuinely cares about helping the user.
+- **CATEGORY-FIRST RESPONSES**: The user selected an explicit ticket category when opening this channel. Always anchor your answers and opening greetings to the **Selected Ticket Category**.
+- **NO HALLUCINATIONS**: Never invent or make up past problems (e.g. do NOT claim the user has a suspended VM or billing issue unless the user explicitly mentioned it in the chat).
 - Format terminal commands, code, configuration snippets, and file paths in clean markdown code blocks.
 
-## INFRASTRUCTURE TIERS & SPECS (FULL CATALOG)
-Vertex Nodes offers a wide range of high-performance free VPS tiers claimable via Discord Invites or Bolts:
-* **VPS Nano**: 3 Cores | 13 GB DDR4 RAM | 100 GB Storage (5 Invites / 1k bolts)
-* **VPS Micro**: 4 Cores | 21 GB DDR4 RAM | 160 GB Storage (8 Invites / 1.6k bolts)
-* **VPS Mini**: 6 Cores | 25 GB DDR4 RAM | 200 GB Storage (10 Invites / 2k bolts)
-* **VPS Small**: 6 Cores | 30 GB DDR4 RAM | 240 GB Storage (12 Invites / 2.4k bolts)
-* **VPS Medium**: 8 Cores | 32 GB DDR4 RAM | 300 GB Storage (15 Invites / 3k bolts)
-* **VPS Large**: 8 Cores | 40 GB DDR4 RAM | 320 GB Storage (16 Invites / 3.2k bolts)
-* **VPS XL**: 10 Cores | 50 GB DDR4 RAM | 400 GB Storage (20 Invites / 4k bolts)
-* **VPS XXL**: 10 Cores | 64 GB DDR4 RAM | 500 GB Storage (25 Invites / 5k bolts)
-* **VPS Jumbo**: 12 Cores | 80 GB DDR4 RAM | 650 GB Storage (30 Invites / 6k bolts)
-* **VPS Enterprise**: 16 Cores | 96 GB DDR4 RAM | 800 GB Storage (40 Invites / 8k bolts)
-
-- **Currency & Rewards**: 1 Boost = 3k bolts | 2 Boosts = 5k bolts. Invites can be converted or redeemed for plans.
-- **Operating Systems**: Linux only (**Ubuntu, Debian, Alpine, Arch, Kali**). Windows is strictly prohibited.
-- **Virtualization**: Proxmox VE nested virtualization & LXC containers are supported across all tiers.
-- **Uptime & Network**: 24/7 continuous uptime, unmetered network bandwidth.
+## TICKET CATEGORY ADHERENCE & GREETING PROTOCOLS:
+1. **Technical Questions**:
+   - Greet the user and ask what technical setup, Linux command, NAT port forwarding, networking, or configuration they need assistance with.
+   - Provide direct, working terminal command blocks and technical diagnostics.
+2. **Purchase VPS / Paid Plans**:
+   - Guide the user on paid plan specs, NVMe performance, dedicated RAM, unmetered bandwidth, and pricing.
+   - Explain how to order or upgrade and answer billing inquiries directly using our knowledge base.
+3. **Account Issue**:
+   - Greet the user and ask what issue they are experiencing with dashboard login, credentials, or account access at https://dash.vertexnodes.top.
+   - If account unlinking, manual email reset, or database verification is needed, gather their registered username/email and escalate via [HANDOFF] with PRIORITY: YELLOW.
+4. **Report Bug / Service Issues**:
+   - Greet the user and ask for the error logs, screenshots, node IDs, or glitches they encountered so you can diagnose the root cause.
+   - If a physical hypervisor node outage or hardware failure is verified, escalate via [HANDOFF] with PRIORITY: RED.
+5. **General Support / Server Management**:
+   - Assist with dashboard navigation, VM power states (start/stop/reboot), finding server IP/ports, and reinstalling Linux distributions.
+6. **General Question**:
+   - Answer platform policies, unmetered network details, 24/7 uptime, and community rules.
+7. **Claim Giveaway Reward / Boost / Invite Rewards**:
+   - Ask what reward they are claiming (1 Boost = 3k bolts, 2 Boosts = 5k bolts, invite redemption tiers).
+   - Guide the user through the redemption steps or page staff for manual reward credit if required.
+8. **"What did I open this ticket about?"**:
+   - State clearly: *"You opened this ticket under the **[Category Name]** category. What specific question or issue can I assist you with?"* (Never make up fake problems!).
 
 ## WORKLOAD SIZING & SALES CONSULTING GUIDELINES
 When users ask what VPS plan is right for their project or workload:
@@ -211,8 +217,22 @@ Does this help, or is there a specific error you're getting when trying to conne
  * Builds the standard support system prompt.
  * Uses pre-built static suffix to avoid re-allocating the same strings per request.
  */
-function buildStandardSystemPrompt(knowledgeBaseText, username) {
-  return `You are the Vertex Nodes support AI. Be direct, concise, honest.
+function buildStandardSystemPrompt(knowledgeBaseText, username, ticketContext = {}) {
+  const categoryLabel = ticketContext.categoryLabel || 'General Support';
+  const categoryDesc = ticketContext.categoryDescription || 'Assistance with server management and dashboard';
+
+  return `You are the senior Technical Support Specialist for Vertex Nodes.
+
+## ACTIVE TICKET GROUND TRUTH:
+- User: @${username}
+- Selected Ticket Category: **${categoryLabel}**
+- Category Focus: ${categoryDesc}
+- CRITICAL INSTRUCTIONS:
+  1. The user opened this ticket specifically for **${categoryLabel}**.
+  2. If the user sends a greeting (e.g. "hey", "hello", "hi"), greet them and immediately ask what they need help with regarding **${categoryLabel}**.
+  3. If the user asks what this ticket is about, answer directly: *"You opened this ticket under **${categoryLabel}** (${categoryDesc}). What question or issue do you have?"*
+  4. NEVER fabricate or hallucinate problems that were not mentioned in this chat (e.g. do not claim they have a suspended VM or billing dispute!).
+  5. Provide direct, accurate technical answers with working code/command blocks when applicable.
 
 --- KNOWLEDGE BASE ---
 ${knowledgeBaseText}
@@ -248,15 +268,15 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
     reply = reply.replace(/\[RESOLVE_PROMPT\][\s\S]*?\[\/RESOLVE_PROMPT\]/i, '').trim();
   }
 
-  // 2. Check for [CLOSE_TICKET] or explicit closing confirmation in the reply
-  const closeMatch = reply.match(/\[CLOSE_TICKET\][\s\S]*?\[\/CLOSE_TICKET\]/i);
+  // 2. Check for [CLOSE_TICKET], [DELETE_TICKET], or [RESOLVE_TICKET]
+  const closeMatch = reply.match(/\[(?:CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE)\][\s\S]*?\[\/(?:CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE)\]/i);
   if (closeMatch) {
     closeTicket = true;
-    const reasonMatch = closeMatch[0].match(/REASON:\s*([\s\S]*?)(?:\[\/CLOSE_TICKET\]|$)/i);
+    const reasonMatch = closeMatch[0].match(/REASON:\s*([\s\S]*?)(?:\[\/(?:CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE)\]|$)/i);
     if (reasonMatch && reasonMatch[1].trim()) {
       closeReason = reasonMatch[1].trim();
     }
-    reply = reply.replace(/\[CLOSE_TICKET\][\s\S]*?\[\/CLOSE_TICKET\]/i, '').trim();
+    reply = reply.replace(/\[(?:CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE)\][\s\S]*?\[\/(?:CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE)\]/gi, '').trim();
   } else {
     // Fallback: If AI literally states it closed the ticket
     const lowerReply = reply.toLowerCase();
@@ -277,10 +297,10 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
   if (handoffMatch) {
     handoff = true;
     const block = handoffMatch[0];
-    const priorityMatch = block.match(/PRIORITY:\s*(RED|YELLOW|GREEN|ORANGE)/i);
+    const priorityMatch = block.match(/PRIORITY:\s*(RED|YELLOW|GREEN|ORANGE|EMERGENCY|MODERATE|MID|LOW)/i);
     if (priorityMatch) {
       const rawP = priorityMatch[1].toLowerCase();
-      priority = rawP === 'orange' ? 'yellow' : rawP;
+      priority = (rawP === 'orange' || rawP === 'moderate' || rawP === 'mid') ? 'yellow' : (rawP === 'emergency' ? 'red' : (rawP === 'low' ? 'green' : rawP));
     }
     const slugMatch = block.match(/SLUG:\s*([a-zA-Z0-9_-]+)/i);
     slug = slugMatch ? slugMatch[1].toLowerCase() : null;
@@ -317,11 +337,13 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
 
   // 5. Universal Tag Scrubber: Clean any lingering internal tags or protocol lines from the message
   reply = reply
-    .replace(/\[\/?(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)[\s\S]*?\]/gi, '')
-    .replace(/\[\/?(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|RESOLVE_PROMPT|REPING)\]/gi, '')
+    .replace(/\[(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)\][\s\S]*?\[\/(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)\]/gi, '')
+    .replace(/\[\/?(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)[\s\S]*?\]/gi, '')
+    .replace(/\[\/?(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING)\]/gi, '')
+    .replace(/REASON:\s*[^\n]+/gi, '')
     .replace(/TOPIC:\s*[^\n]+/gi, '')
     .replace(/QUESTION:\s*[^\n]+/gi, '')
-    .replace(/PRIORITY:\s*(?:RED|YELLOW|GREEN|ORANGE)/gi, '')
+    .replace(/PRIORITY:\s*(?:RED|YELLOW|GREEN|ORANGE|EMERGENCY|MODERATE|MID|LOW)/gi, '')
     .replace(/SLUG:\s*[a-zA-Z0-9_-]+/gi, '')
     .replace(/SUMMARY:\s*[^\n]+/gi, '')
     .trim();
@@ -355,10 +377,18 @@ async function generateSupportResponse(conversationHistory, userQuery, username 
     };
   }
 
-  const { escalated = false, priority: escalatedPriority = 'green', lastSummary = '' } = ticketState;
+  const {
+    escalated = false,
+    priority: escalatedPriority = 'green',
+    lastSummary = '',
+    category = 'general_support',
+    categoryLabel = 'General Support',
+    categoryDescription = 'Assistance with server management and dashboard'
+  } = ticketState;
+
   const knowledgeBaseText = escalated
     ? getKnowledgeContext()
-    : getFocusedKnowledgeContext(userQuery, 4);
+    : getFocusedKnowledgeContext(userQuery, 5, category);
 
   // ─── POST-ESCALATION / HOLDING MODE ──────────────────────────────────────────
   if (escalated) {
@@ -368,6 +398,7 @@ async function generateSupportResponse(conversationHistory, userQuery, username 
 
     const holdingSystemPrompt = `You are a technical support agent for Vertex Nodes in a holding role awaiting staff.
 Current escalation: ${escalatedPriority.toUpperCase()} — ${lastSummary || 'awaiting staff'}
+Category: ${categoryLabel}
 ${urgencyNote}
 - Tone: Direct, technical, no emojis, no customer service pleasantries.
 
@@ -441,7 +472,11 @@ User: @${username}`;
   }
 
   // ─── STANDARD SUPPORT MODE ────────────────────────────────────────────────────
-  const systemPrompt = buildStandardSystemPrompt(knowledgeBaseText, username);
+  const systemPrompt = buildStandardSystemPrompt(knowledgeBaseText, username, {
+    category,
+    categoryLabel,
+    categoryDescription
+  });
   const messages = [{ role: 'system', content: systemPrompt }];
 
   if (Array.isArray(conversationHistory)) {

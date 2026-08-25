@@ -14,7 +14,7 @@ module.exports = {
   /**
    * Creates a new ticket channel for a user.
    */
-  async createTicketChannel(guild, user) {
+  async createTicketChannel(guild, user, categoryId = 'general_support') {
     // 1. Check for existing active ticket
     const existing = db.getUserActiveTicket(user.id, guild.id);
     if (existing) {
@@ -26,6 +26,8 @@ module.exports = {
         };
       }
     }
+
+    const categoryData = embedBuilder.getCategoryData(categoryId);
 
     // 2. Get next sequential ticket number
     const ticketNumber = db.getNextTicketNumber();
@@ -83,7 +85,7 @@ module.exports = {
         name: channelName,
         type: ChannelType.GuildText,
         parent: config.tickets.categoryId || null,
-        topic: `Support Ticket for ${user.tag} (${user.id}) | Ticket #${formattedNumber}`,
+        topic: `${categoryData.label} Support for ${user.tag} (${user.id}) | Ticket #${formattedNumber}`,
         permissionOverwrites: permissionOverwrites
       });
 
@@ -91,11 +93,12 @@ module.exports = {
       db.createTicket(channel.id, {
         userId: user.id,
         guildId: guild.id,
-        ticketNumber: ticketNumber
+        ticketNumber: ticketNumber,
+        category: categoryId
       });
 
       // 6. Send Greeting Embed & Ticket Controls
-      const greeting = embedBuilder.createTicketGreeting(user, ticketNumber);
+      const greeting = embedBuilder.createTicketGreeting(user, ticketNumber, categoryId);
       await channel.send(greeting);
 
       return { success: true, channel };
@@ -157,12 +160,18 @@ module.exports = {
         }
       }
 
-      // 5. Send transcript to user via DM
+      // 5. Send enhanced transcript to user via DM
       if (transcriptAttachment && ticketData.userId) {
         const ticketUser = await channel.client.users.fetch(ticketData.userId).catch(() => null);
         if (ticketUser) {
+          const userDmEmbed = embedBuilder.createTranscriptUserDMEmbed(
+            ticketData,
+            channel.guild,
+            closedByUser,
+            messages.size
+          );
           await ticketUser.send({
-            content: `Your support ticket in **${channel.guild.name}** has been closed. Here is your transcript:`,
+            embeds: [userDmEmbed],
             files: [transcriptAttachment]
           }).catch(() => {
             // User DMs may be closed, ignore

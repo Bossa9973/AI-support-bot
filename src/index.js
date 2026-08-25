@@ -109,8 +109,8 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // 2. Handle Ticket Tool Buttons
-    if (interaction.isButton()) {
+    // 2. Handle Ticket Tool Buttons & Select Menus
+    if (interaction.isButton() || interaction.isStringSelectMenu()) {
       await handleButton(interaction);
       return;
     }

@@ -214,9 +214,10 @@ async function sendKnowledgeQuestionToOwner(discordClient, data) {
     const ticketNumStr = data.ticketNumber ? `#${String(data.ticketNumber).padStart(4, '0')}` : 'Live Ticket';
     const embed = new EmbedBuilder()
       .setColor('#9B59B6')
-      .setTitle(`❓ Knowledge Gap Detected in Ticket ${ticketNumStr} — \`${data.topic}\``)
+      .setTitle(`❓ Knowledge Gap Detected • Ticket ${ticketNumStr}`)
       .setDescription(
-        `Hey Boss! A user asked a question where I didn't have enough knowledge. Instead of escalating prematurely, I need your clarification.`
+        `Hey Boss! A user asked a question where existing documentation was incomplete.\n` +
+        `To maintain accurate responses without premature escalations, please provide your guidance below.`
       )
       .addFields([
         {
@@ -225,28 +226,28 @@ async function sendKnowledgeQuestionToOwner(discordClient, data) {
           inline: true
         },
         {
-          name: '📌 Topic',
-          value: data.topic || 'General Inquiry',
+          name: '📌 Topic Area',
+          value: `\`${data.topic || 'General Inquiry'}\``,
           inline: true
         },
         {
-          name: '👤 User Asked',
+          name: '👤 User Question in Ticket',
           value: `> ${String(data.userQuery || data.contextSummary || 'User inquiry').slice(0, 300)}`,
           inline: false
         },
         {
-          name: '🧠 Question for You',
+          name: '🧠 Clarification Needed',
           value: `**${data.question}**`,
           inline: false
         }
       ])
-      .setFooter({ text: '💬 Reply directly to this DM with your answer! I will learn it and update my knowledge base.' })
+      .setFooter({ text: 'Reply directly to this DM to teach me! I will draft an update for your approval.' })
       .setTimestamp();
 
     if (data.guildId && data.channelId) {
       embed.addFields([{
-        name: '🔗 Ticket Link',
-        value: `[Open Ticket Channel](https://discord.com/channels/${data.guildId}/${data.channelId})`,
+        name: '🔗 Ticket Channel',
+        value: `[Jump to Ticket Channel](https://discord.com/channels/${data.guildId}/${data.channelId})`,
         inline: false
       }]);
     }
@@ -279,53 +280,56 @@ async function sendSuggestionToOwner(discordClient, suggestion) {
 
     const isArticle = suggestion.type === 'article';
     const color = isArticle ? '#5865F2' : '#57F287';
-    const typeLabel = isArticle ? '📖 Article Draft' : '💡 Lesson Draft';
+    const typeLabel = isArticle ? '📖 Categorized Article' : '💡 Atomic Lesson';
 
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(`🧠 Self-Learning Suggestion — \`${suggestion.id}\``)
-      .setDescription(`The AI identified new platform knowledge from a support ticket and drafted the following ${isArticle ? 'article' : 'lesson'} for your review.`)
+      .setTitle(`🧠 Self-Learning Proposal • \`${suggestion.id}\``)
+      .setDescription(
+        `The AI analyzed resolved support interactions and identified new platform knowledge.\n` +
+        `Review the drafted **${suggestion.type}** below:`
+      )
       .addFields([
         {
-          name: '📌 Type',
+          name: '📌 Format',
           value: typeLabel,
           inline: true
         },
         {
-          name: '🏷️ Suggestion ID',
+          name: '🏷️ Proposal ID',
           value: `\`${suggestion.id}\``,
           inline: true
         },
         {
-          name: '🔍 Source / Context',
+          name: '🔍 Trigger Context',
           value: `> ${suggestion.triggerQuery.slice(0, 200)}`,
           inline: false
         },
         {
-          name: '🧩 Why it should be added',
+          name: '🧩 Rationale',
           value: suggestion.reasoning.slice(0, 400),
           inline: false
         }
       ])
       .setTimestamp()
-      .setFooter({ text: 'Reply with the ID to ask questions, or use the buttons below to approve/reject.' });
+      .setFooter({ text: 'Click Approve to add into knowledge base, or reply with suggestions to refine.' });
 
     if (isArticle) {
       embed.addFields([
-        { name: '📂 Category', value: `\`${suggestion.category}\``, inline: true },
-        { name: '📄 Title', value: suggestion.title, inline: true },
+        { name: '📂 Target Category', value: `\`${suggestion.category}\``, inline: true },
+        { name: '📄 Article Title', value: suggestion.title, inline: true },
         { name: '📑 Content Preview', value: '```markdown\n' + suggestion.content.slice(0, 800) + (suggestion.content.length > 800 ? '\n...(truncated)' : '') + '\n```', inline: false }
       ]);
     } else {
       embed.addFields([
-        { name: '🔑 Key', value: `\`${suggestion.key}\``, inline: true },
-        { name: '📝 Fact', value: suggestion.fact, inline: false }
+        { name: '🔑 Topic Key', value: `\`${suggestion.key}\``, inline: true },
+        { name: '📝 Atomic Fact', value: suggestion.fact, inline: false }
       ]);
     }
 
     if (suggestion.sources && suggestion.sources.length > 0) {
       embed.addFields([{
-        name: '🔗 Sources',
+        name: '🔗 Referenced Sources',
         value: suggestion.sources.map(s => `• ${s}`).join('\n').slice(0, 500),
         inline: false
       }]);
@@ -333,12 +337,14 @@ async function sendSuggestionToOwner(discordClient, suggestion) {
 
     const approveBtn = new ButtonBuilder()
       .setCustomId(`learn_approve_${suggestion.id}`)
-      .setLabel('✅ Approve & Add')
+      .setLabel('Approve & Add')
+      .setEmoji('✅')
       .setStyle(ButtonStyle.Success);
 
     const rejectBtn = new ButtonBuilder()
       .setCustomId(`learn_reject_${suggestion.id}`)
-      .setLabel('❌ Reject')
+      .setLabel('Discard')
+      .setEmoji('❌')
       .setStyle(ButtonStyle.Danger);
 
     const row = new ActionRowBuilder().addComponents(approveBtn, rejectBtn);

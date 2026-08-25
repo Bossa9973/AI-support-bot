@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const db = require('../database/db');
+const embedBuilder = require('../utils/embedBuilder');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,21 +16,32 @@ module.exports = {
   async execute(interaction) {
     const ticket = db.getTicket(interaction.channel.id);
     if (!ticket) {
-      return interaction.reply({ content: '❌ This channel is not an active ticket.', ephemeral: true });
+      const errorEmbed = embedBuilder.createErrorEmbed(
+        'Invalid Ticket Channel',
+        'This command can only be used inside an active ticket channel.'
+      );
+      return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
     }
 
     const targetUser = interaction.options.getUser('user');
     if (targetUser.id === ticket.userId) {
+      const warningEmbed = embedBuilder.createWarningEmbed(
+        'Action Prohibited',
+        'You cannot remove the ticket owner from their own support ticket.'
+      );
       return interaction.reply({
-        content: '⚠️ You cannot remove the ticket creator from their own ticket.',
+        embeds: [warningEmbed],
         ephemeral: true
       });
     }
 
     await interaction.channel.permissionOverwrites.delete(targetUser.id);
 
-    await interaction.reply({
-      content: `✅ Successfully removed <@${targetUser.id}> from this ticket.`
-    });
+    const successEmbed = embedBuilder.createSuccessEmbed(
+      'Member Removed from Ticket',
+      `<@${targetUser.id}>'s access to this ticket has been revoked by <@${interaction.user.id}>.`
+    );
+
+    await interaction.reply({ embeds: [successEmbed] });
   }
 };
