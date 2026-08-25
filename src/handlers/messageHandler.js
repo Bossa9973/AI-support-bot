@@ -152,9 +152,8 @@ module.exports = {
 
       // 6. Enqueue AI work for this channel (serial per-channel, parallel across channels)
       await aiQueue.run(message.channel.id, async () => {
-        try {
-          // 6a. Await pre-fetched history (likely already done by now)
-          const history = await historyPromise;
+        // 6a. Await pre-fetched history (likely already done by now)
+        const history = await historyPromise;
 
           // 6b. Parse attachments from the current message
           const imageUrls = [];
