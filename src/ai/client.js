@@ -69,17 +69,46 @@ async function createChatCompletion(params, options = {}) {
           continue;
         }
 
-        // If credits are 0 or cannot afford on paid model, switch to fallback free model
-        const fallbackModel = config.ai.fallbackModel || 'meta-llama/llama-3.3-70b-instruct:free';
+        // If credits are 0 or cannot afford on paid model, switch to ultra-efficient llama-3.1-8b-instruct
+        const fallbackModel = config.ai.fallbackModel || 'meta-llama/llama-3.1-8b-instruct';
         if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
-          console.warn(`[${context}] ⚠️ OpenRouter paid model credit exhausted. Automatically falling back to free model (${fallbackModel})...`);
+          console.warn(`[${context}] ⚠️ OpenRouter paid model credit low. Automatically falling back to efficient model (${fallbackModel}) with max_tokens: 300...`);
           requestParams.model = fallbackModel;
-          requestParams.max_tokens = Math.min(requestParams.max_tokens || 500, 500);
+          requestParams.max_tokens = 300;
           continue;
         }
       }
 
-      // ─── 2. HANDLE 429 / 529 / 503 / 502 RATE LIMITS & OVERLOADS ──────────────
+      // ─── 2. HANDLE 404 MODEL UNAVAILABLE / REDIRECT SLUG ─────────────────────
+      if (status === 404 || errMsg.includes('404') || errMsg.includes('unavailable') || errMsg.includes('No endpoints found')) {
+        const slugMatch = errMsg.match(/use this slug instead:\s*([a-zA-Z0-9_\-\.\/:]+)/i);
+        if (slugMatch) {
+          const suggestedSlug = slugMatch[1].trim();
+          console.warn(`[${context}] ⚠️ OpenRouter model redirected: switching to suggested slug (${suggestedSlug}) with max_tokens: 350...`);
+          requestParams.model = suggestedSlug;
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 350, 350);
+          continue;
+        }
+
+        // If the model was a :free model that failed, fallback to base model with low tokens
+        if (requestParams.model.endsWith(':free')) {
+          const baseSlug = requestParams.model.replace(':free', '');
+          console.warn(`[${context}] ⚠️ Free model endpoint unavailable. Retrying with base model (${baseSlug}) with low max_tokens...`);
+          requestParams.model = baseSlug;
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 300, 300);
+          continue;
+        }
+
+        // Fallback to primary configured model or ultra-cheap llama-3.1-8b-instruct
+        if (requestParams.model !== 'meta-llama/llama-3.1-8b-instruct') {
+          console.warn(`[${context}] ⚠️ Model unavailable (404). Falling back to meta-llama/llama-3.1-8b-instruct...`);
+          requestParams.model = 'meta-llama/llama-3.1-8b-instruct';
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 350, 350);
+          continue;
+        }
+      }
+
+      // ─── 3. HANDLE 429 / 529 / 503 / 502 RATE LIMITS & OVERLOADS ──────────────
       const isRetryable =
         status === 429 ||
         status === 529 ||

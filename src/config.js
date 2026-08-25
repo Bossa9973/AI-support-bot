@@ -48,8 +48,8 @@ if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
   }
 }
 
-const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '600', 10);
-const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct:free' : 'meta/llama-3.3-70b-instruct');
+const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '350', 10);
+const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter' ? 'meta-llama/llama-3.1-8b-instruct' : 'meta/llama-3.3-70b-instruct');
 
 const activeAIConfig = selectedProvider === 'nvidia'
   ? {
