@@ -292,5 +292,89 @@ module.exports = {
         content: `❌ Suggestion \`${suggId}\` rejected. It won't be applied to the knowledge base.`
       });
     }
+
+    // 13. DM Interactive Draft: Accept & Save
+    if (customId.startsWith('dm_accept_draft_')) {
+      const draftId = customId.replace('dm_accept_draft_', '');
+      const draft = db.getDraft(draftId);
+      if (!draft) {
+        return interaction.reply({ content: `⚠️ Draft \`${draftId}\` not found or already processed.`, ephemeral: true });
+      }
+      if (draft.status !== 'pending') {
+        return interaction.reply({ content: `⚠️ Draft \`${draftId}\` has already been ${draft.status}.`, ephemeral: true });
+      }
+
+      await interaction.deferUpdate().catch(() => {});
+
+      try {
+        let saveResult;
+        if (draft.type === 'article') {
+          saveResult = knowledgeManager.saveArticle(draft.category, draft.title, draft.content, draft.slug);
+        } else if (draft.type === 'lesson') {
+          saveResult = knowledgeManager.saveLesson(draft.key, draft.fact);
+        } else if (draft.type === 'override') {
+          saveResult = knowledgeManager.addOverride(draft.directive, draft.reason || 'Set via Owner DM');
+        }
+
+        if (draft.gapId) {
+          db.resolvePendingQuestion(draft.gapId, { draftId, result: saveResult });
+        }
+        if (draft.suggId) {
+          db.approveSuggestion(draft.suggId);
+        }
+
+        db.approveDraft(draftId);
+
+        const { EmbedBuilder: ButtonEmbed } = require('discord.js');
+        const confirmEmbed = new ButtonEmbed()
+          .setColor('#57F287')
+          .setTitle(`✅ Draft Accepted & Published`)
+          .setDescription(
+            draft.type === 'article'
+              ? `📖 **Article Saved**: \`${draft.category}/${saveResult.slug}.md\` (${draft.title})\n\nI am now actively utilizing this knowledge for all ticket responses.`
+              : draft.type === 'lesson'
+              ? `💡 **Lesson Learned**: \`${draft.key}\`\n> ${draft.fact}\n\nI have saved this atomic fact to my live memory.`
+              : `🚨 **Override Enacted**: \`${saveResult.id}\`\n> ${draft.directive}\n\nThis directive is now in effect across all tickets.`
+          )
+          .setFooter({ text: `Draft ID: ${draftId} • Saved to Knowledge Base` })
+          .setTimestamp();
+
+        return interaction.editReply({
+          content: '🎉 **Successfully published to knowledge base, Boss!**',
+          embeds: [confirmEmbed],
+          components: []
+        });
+      } catch (err) {
+        return interaction.followUp({ content: `❌ Error saving draft: ${err.message}`, ephemeral: true });
+      }
+    }
+
+    // 14. DM Interactive Draft: Decline
+    if (customId.startsWith('dm_decline_draft_')) {
+      const draftId = customId.replace('dm_decline_draft_', '');
+      const draft = db.getDraft(draftId);
+      if (!draft) {
+        return interaction.reply({ content: `⚠️ Draft \`${draftId}\` not found.`, ephemeral: true });
+      }
+      db.rejectDraft(draftId);
+
+      const { EmbedBuilder: ButtonEmbed } = require('discord.js');
+      const declineEmbed = new ButtonEmbed()
+        .setColor('#ED4245')
+        .setTitle(`❌ Draft Declined & Discarded`)
+        .setDescription(`Draft \`${draftId}\` (${(draft.type || 'draft').toUpperCase()}: **${draft.title || draft.key || draft.directive || 'Draft'}**) was discarded.\nNo changes were made to the knowledge base.`)
+        .setFooter({ text: 'You can give me new instructions anytime to propose a fresh draft.' });
+
+      try {
+        await interaction.update({
+          content: '🗑️ Draft discarded.',
+          embeds: [declineEmbed],
+          components: []
+        });
+      } catch {
+        await interaction.reply({ embeds: [declineEmbed] });
+      }
+      return;
+    }
   }
 };

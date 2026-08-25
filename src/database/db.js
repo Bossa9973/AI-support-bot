@@ -12,8 +12,10 @@ if (!fs.existsSync(dataDir)) {
 // Initial DB state
 let database = {
   counter: 0,
-  tickets: {},       // channelId -> ticketData
-  suggestions: {}    // suggestionId -> suggestion
+  tickets: {},          // channelId -> ticketData
+  suggestions: {},      // suggestionId -> suggestion
+  pendingQuestions: {}, // gapId -> question
+  drafts: {}            // draftId -> draft
 };
 
 // Load database from file
@@ -22,12 +24,15 @@ function loadDB() {
     if (fs.existsSync(dbFile)) {
       const data = fs.readFileSync(dbFile, 'utf8');
       database = JSON.parse(data);
-    } else {
-      saveDB();
     }
   } catch (err) {
     console.error('Error loading database:', err);
   }
+  if (!database.tickets) database.tickets = {};
+  if (!database.suggestions) database.suggestions = {};
+  if (!database.pendingQuestions) database.pendingQuestions = {};
+  if (!database.drafts) database.drafts = {};
+  saveDB();
 }
 
 // Save database to file
@@ -170,6 +175,63 @@ module.exports = {
       database.pendingQuestions[id].resolution = resolution;
       saveDB();
       return database.pendingQuestions[id];
+    }
+    return null;
+  },
+
+  // ─── INTERACTIVE DRAFTS (DM ITERATIVE COLLABORATION) ───────────────────────
+
+  saveDraft(draft) {
+    if (!database.drafts) database.drafts = {};
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let rand = '';
+    for (let i = 0; i < 4; i++) rand += chars[Math.floor(Math.random() * chars.length)];
+    const id = draft.id || `DRAFT-${rand}`;
+    const now = new Date().toISOString();
+    const existing = database.drafts[id] || {};
+
+    database.drafts[id] = {
+      ...existing,
+      ...draft,
+      id,
+      status: draft.status || existing.status || 'pending',
+      createdAt: existing.createdAt || now,
+      updatedAt: now
+    };
+    saveDB();
+    return database.drafts[id];
+  },
+
+  getDraft(id) {
+    return (database.drafts || {})[id] || null;
+  },
+
+  getLatestPendingDraft() {
+    const list = this.listPendingDrafts();
+    if (list.length === 0) return null;
+    return list.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0];
+  },
+
+  listPendingDrafts() {
+    return Object.values(database.drafts || {}).filter((d) => d.status === 'pending');
+  },
+
+  approveDraft(id) {
+    if (database.drafts && database.drafts[id]) {
+      database.drafts[id].status = 'approved';
+      database.drafts[id].approvedAt = new Date().toISOString();
+      saveDB();
+      return database.drafts[id];
+    }
+    return null;
+  },
+
+  rejectDraft(id) {
+    if (database.drafts && database.drafts[id]) {
+      database.drafts[id].status = 'rejected';
+      database.drafts[id].rejectedAt = new Date().toISOString();
+      saveDB();
+      return database.drafts[id];
     }
     return null;
   }

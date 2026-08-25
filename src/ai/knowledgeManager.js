@@ -146,6 +146,26 @@ module.exports = {
     return false;
   },
 
+  findArticle(queryOrSlug) {
+    if (!queryOrSlug) return null;
+    const cleanQuery = sanitizeName(queryOrSlug);
+    const articles = this.listArticles();
+    for (const [cat, list] of Object.entries(articles)) {
+      for (const item of list) {
+        if (item.slug === cleanQuery || sanitizeName(item.title) === cleanQuery || item.slug.includes(cleanQuery) || cleanQuery.includes(item.slug)) {
+          const content = this.getArticle(cat, item.slug);
+          return {
+            category: cat,
+            slug: item.slug,
+            title: item.title,
+            content
+          };
+        }
+      }
+    }
+    return null;
+  },
+
   // ==========================================
   // 2. LESSONS (Fast, Atomic Facts)
   // ==========================================
