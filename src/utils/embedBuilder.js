@@ -135,7 +135,19 @@ module.exports = {
       .setEmoji('🙋‍♂️')
       .setStyle(btnStyle);
 
-    const row = new ActionRowBuilder().addComponents(claimBtn);
+    const continueAiBtn = new ButtonBuilder()
+      .setCustomId('ticket_continue_ai')
+      .setLabel('Continue with AI')
+      .setEmoji('🤖')
+      .setStyle(ButtonStyle.Secondary);
+
+    const transferBtn = new ButtonBuilder()
+      .setCustomId('ticket_transfer')
+      .setLabel('Transfer')
+      .setEmoji('🔄')
+      .setStyle(ButtonStyle.Secondary);
+
+    const row = new ActionRowBuilder().addComponents(claimBtn, transferBtn, continueAiBtn);
 
     return {
       content: supportRoleId ? `<@&${supportRoleId}>` : undefined,
@@ -166,6 +178,69 @@ module.exports = {
     const row = new ActionRowBuilder().addComponents(confirmBtn, cancelBtn);
 
     return { embeds: [embed], components: [row] };
+  },
+
+  /**
+   * Resolution prompt asked to the user when AI solves an issue.
+   * @param {string} userId 
+   */
+  createResolutionPrompt(userId) {
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle('❓ Did this solve your issue?')
+      .setDescription(
+        `Hey <@${userId}>, please let us know if your question or issue has been resolved so we can keep our support queue clean.`
+      )
+      .setFooter({ text: 'Auto-closes after 10 minutes of inactivity if unresolved' });
+
+    const yesBtn = new ButtonBuilder()
+      .setCustomId('ticket_resolve_yes')
+      .setLabel('Yes, Close Ticket')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success);
+
+    const noBtn = new ButtonBuilder()
+      .setCustomId('ticket_resolve_no')
+      .setLabel('No, Need More Help')
+      .setEmoji('❌')
+      .setStyle(ButtonStyle.Secondary);
+
+    const row = new ActionRowBuilder().addComponents(yesBtn, noBtn);
+
+    return { embeds: [embed], components: [row] };
+  },
+
+  /**
+   * 5-minute inactivity reminder pinging the user.
+   * @param {string} userId 
+   */
+  createInactivityReminder(userId) {
+    const embed = new EmbedBuilder()
+      .setColor('#FEE75C')
+      .setTitle('⏳ Ticket Inactivity Reminder')
+      .setDescription(
+        `Hey <@${userId}>! Just checking in to make sure everything is taken care of.\n\n` +
+        `• If you're all set, click **Yes, Close Ticket** below.\n` +
+        `• If you still need help, reply in this channel or click **No, Need More Help**.\n\n` +
+        `⏰ *This ticket will automatically close in **5 minutes** if no response is received.*`
+      )
+      .setTimestamp();
+
+    const yesBtn = new ButtonBuilder()
+      .setCustomId('ticket_resolve_yes')
+      .setLabel('Yes, Close Ticket')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success);
+
+    const noBtn = new ButtonBuilder()
+      .setCustomId('ticket_resolve_no')
+      .setLabel('No, Need More Help')
+      .setEmoji('❌')
+      .setStyle(ButtonStyle.Secondary);
+
+    const row = new ActionRowBuilder().addComponents(yesBtn, noBtn);
+
+    return { content: `<@${userId}>`, embeds: [embed], components: [row] };
   },
 
   /**

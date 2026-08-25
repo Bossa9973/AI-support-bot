@@ -1,22 +1,58 @@
 {
   "Standard Support Hours": {
     "fact": "AI assistance is active 24/7. Human staff review tickets Monday through Friday 9 AM to 6 PM EST.",
-    "updatedAt": "2026-08-24T17:40:03.634Z"
+    "updatedAt": "2026-08-24T18:31:03.734Z"
   },
   "Accepted Payment Methods": {
     "fact": "Stripe, PayPal, Credit/Debit cards, and Cryptocurrencies (USDT, SOL, BTC, LTC, ETH).",
-    "updatedAt": "2026-08-24T17:40:03.667Z"
+    "updatedAt": "2026-08-24T18:31:03.736Z"
   },
   "Zero-Cost Reseller Cap": {
     "fact": "Strictly capped at 30.00% markup over base price. System retains base cost and credits markup profit to reseller balance.",
-    "updatedAt": "2026-08-24T17:40:03.680Z"
+    "updatedAt": "2026-08-24T18:31:03.736Z"
   },
   "Reseller Minimum Withdrawal": {
     "fact": "Minimum $10 USD equivalent in crypto (USDT: 10, SOL: 0.05, BTC: 0.0002, LTC: 0.15, ETH: 0.003).",
-    "updatedAt": "2026-08-24T17:40:03.693Z"
+    "updatedAt": "2026-08-24T18:31:03.737Z"
   },
   "Web Terminal 1-Click Repair": {
     "fact": "Automated diagnostic toolbar button that fixes QEMU Guest Agent serial sockets and DNS host mappings in 30 seconds.",
-    "updatedAt": "2026-08-24T17:40:03.705Z"
+    "updatedAt": "2026-08-24T18:31:03.738Z"
+  },
+  "VM IPv4 Allocation": {
+    "fact": "Most free VMs run on a NAT network without a public IPv4 address. Only paid VMs come with a dedicated public IPv4.",
+    "updatedAt": "2026-08-24T19:03:54.828Z"
+  },
+  "Paid VPS Plan Inquiries": {
+    "fact": "When a user inquires about paid VPS plans, do NOT quote pricing directly. Instead, collect their details (desired specs/resources, budget, use case, Discord contact) and escalate the inquiry to the admin staff for a personalized offer.",
+    "updatedAt": "2026-08-24T19:06:24.084Z"
+  },
+  "Unknown Information Escalation Protocol": {
+    "fact": "When the AI does not know an answer or lacks information on a topic, it must NOT guess or try to figure it out. Instead: (1) Summarize the entire user conversation, (2) Categorize the issue, (3) Escalate the summary to admin staff to handle.",
+    "updatedAt": "2026-08-24T20:38:16.163Z"
+  },
+  "Vertex Nodes Ownership": {
+    "fact": "Vertex Nodes is currently owned by Kreed, and the service was previously known as LumenHost before being sold. Beyond the owner, staff consists of administrators (handling escalated tickets, suspension reviews, refunds, reseller payout approvals, and node management) and support/moderation staff working alongside AI support.",
+    "updatedAt": "2026-08-24T20:49:08.955Z"
+  },
+  "Free VM Promotion Style": {
+    "fact": "When discussing free VMs, promote them subtly and conversationally without sounding like a sales pitch. Do not drive customers away with aggressive marketing. Key capabilities to mention naturally: free VMs are suitable for hosting, support Proxmox and Pterodactyl, and can withstand real hosting workloads.",
+    "updatedAt": "2026-08-24T20:56:45.042Z"
+  },
+  "Proxmox & Pterodactyl Production Promotion": {
+    "fact": "Always state that Proxmox is fully suitable for production environments — users can host Proxmox for their own users/customers and have everything running great. The same applies to Pterodactyl. Exaggerate positively when promoting these platforms: use confident, enthusiastic language about stability, performance, and reliability.",
+    "updatedAt": "2026-08-24T21:02:13.993Z"
+  },
+  "Vertex Free VPS Plans": {
+    "fact": "VPS Nano: 100GB storage, 13GB RAM, 3 Cores, 5 invites, 1k bolts\nVPS Micro: 160GB storage, 21GB RAM, 4 Cores, 8 invites, 1.6k bolts\nVPS Mini: 200GB storage, 25GB RAM, 6 Cores, 10 invites, 2k bolts\nVPS Small: 240GB storage, 30GB RAM, 6 Cores, 12 invites, 2.4k bolts\nVPS Medium: 300GB storage, 32GB RAM, 8 Cores, 15 invites, 3k bolts\nVPS Large: 320GB storage, 40GB RAM, 8 Cores, 16 invites, 3.2k bolts\nVPS XL: 400GB storage, 50GB RAM, 10 Cores, 20 invites, 4k bolts\nVPS XXL: 500GB storage, 64GB RAM, 10 Cores, 25 invites, 5k bolts\nVPS Jumbo: 650GB storage, 80GB RAM, 12 Cores, 30 invites, 6k bolts\nVPS Enterprise: 800GB storage, 96GB RAM, 16 Cores, 40 invites, 8k bolts",
+    "updatedAt": "2026-08-24T21:53:18.619Z"
+  },
+  "Node CPU Hardware": {
+    "fact": "The node runs on a Ryzen 9 CPU.",
+    "updatedAt": "2026-08-24T22:17:50.998Z"
+  },
+  "Free Server CPU Hardware": {
+    "fact": "Free servers run on an AMD Ryzen 9 5950X CPU.",
+    "updatedAt": "2026-08-25T06:25:34.880Z"
   }
 }

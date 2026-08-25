@@ -14,6 +14,7 @@ const { handleButton } = require('./handlers/buttonHandler');
 const { handleMessage } = require('./handlers/messageHandler');
 const { handleDM } = require('./handlers/dmHandler');
 const { getKnowledgeContext } = require('./ai/knowledgeBase');
+const { warmupConnection } = require('./ai/client');
 
 // Create Discord Client with required Intents including Direct Messages
 const client = new Client({
@@ -84,11 +85,14 @@ client.once('ready', async () => {
   console.log('====================================================');
   console.log(`🤖 AI Support Bot is ONLINE as ${client.user.tag}`);
   console.log(`👑 Owner ID configured: ${config.ownerId ? config.ownerId : 'None (Set OWNER_ID in .env)'}`);
-  console.log(`🧠 AI Model: ${config.openRouter.model}`);
+  console.log(`🧠 AI Provider: ${config.ai.providerName} (${config.ai.model})`);
   console.log(`📚 Knowledge Context Loaded (${getKnowledgeContext().length} chars)`);
   console.log('====================================================');
 
   await registerCommands();
+
+  // Warm up the AI HTTP connection pool to avoid cold-start latency on the first ticket
+  setTimeout(() => warmupConnection(), 2000);
 });
 
 // Interaction Event (Slash Commands & Buttons)
@@ -126,6 +130,9 @@ client.on('interactionCreate', async (interaction) => {
 
 // Message Event (Tickets & Owner DMs)
 client.on('messageCreate', async (message) => {
+  // Ignore bot messages
+  if (message.author.bot) return;
+
   // Check for Direct Message (Owner Training / Executive Control)
   if (!message.guild || message.channel.type === ChannelType.DM) {
     await handleDM(message);

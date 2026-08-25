@@ -1,4 +1,7 @@
+const fs = require('fs');
+const path = require('path');
 const knowledgeManager = require('./src/ai/knowledgeManager');
+const knowledgeData = require('./knowledge-base/knowledge-data');
 
 console.log('Seeding initial Structured Articles and Lessons...');
 
@@ -64,5 +67,20 @@ knowledgeManager.saveArticle(
 - Create public checkout links at \`/pay/{uuid}\` bound to plan specs and target crypto (\`USDT\`, \`SOL\`, \`BTC\`, \`LTC\`, \`ETH\`).
 - Automated VM provisioning triggers immediately upon blockchain payment confirmation.`
 );
+
+// 3. Seed Knowledge Items from knowledgeData
+console.log(`Seeding ${knowledgeData.length} extended knowledge base items...`);
+for (const item of knowledgeData) {
+  knowledgeManager.saveArticle(
+    item.category,
+    item.title,
+    item.contentMd,
+    item.slug
+  );
+}
+
+// Write out formatted JSON version for reference
+const dataJsonPath = path.join(__dirname, 'knowledge-base/knowledge-data.json');
+fs.writeFileSync(dataJsonPath, JSON.stringify(knowledgeData, null, 2), 'utf8');
 
 console.log('✅ Structured Articles and Lessons seeded successfully!');

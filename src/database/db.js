@@ -12,7 +12,8 @@ if (!fs.existsSync(dataDir)) {
 // Initial DB state
 let database = {
   counter: 0,
-  tickets: {} // channelId -> ticketData
+  tickets: {},       // channelId -> ticketData
+  suggestions: {}    // suggestionId -> suggestion
 };
 
 // Load database from file
@@ -96,5 +97,80 @@ module.exports = {
 
   claimTicket(channelId, staffId) {
     return this.updateTicket(channelId, { claimedBy: staffId, claimedAt: new Date().toISOString() });
+  },
+
+  unclaimTicket(channelId) {
+    return this.updateTicket(channelId, {
+      claimedBy: null,
+      continueWithAi: false,
+      unclaimedAt: new Date().toISOString(),
+      status: 'unclaimed'
+    });
+  },
+
+  // ─── SELF-LEARNING SUGGESTIONS ──────────────────────────────────────────────
+
+  saveSuggestion(suggestion) {
+    if (!database.suggestions) database.suggestions = {};
+    database.suggestions[suggestion.id] = suggestion;
+    saveDB();
+    return suggestion;
+  },
+
+  getSuggestion(id) {
+    return (database.suggestions || {})[id] || null;
+  },
+
+  listPendingSuggestions() {
+    return Object.values(database.suggestions || {}).filter(s => s.status === 'pending');
+  },
+
+  approveSuggestion(id) {
+    if (database.suggestions && database.suggestions[id]) {
+      database.suggestions[id].status = 'approved';
+      database.suggestions[id].approvedAt = new Date().toISOString();
+      saveDB();
+      return database.suggestions[id];
+    }
+    return null;
+  },
+
+  rejectSuggestion(id) {
+    if (database.suggestions && database.suggestions[id]) {
+      database.suggestions[id].status = 'rejected';
+      database.suggestions[id].rejectedAt = new Date().toISOString();
+      saveDB();
+      return database.suggestions[id];
+    }
+    return null;
+  },
+
+  // ─── PENDING OWNER KNOWLEDGE QUESTIONS ──────────────────────────────────────
+
+  savePendingQuestion(id, data) {
+    if (!database.pendingQuestions) database.pendingQuestions = {};
+    database.pendingQuestions[id] = {
+      id,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      ...data
+    };
+    saveDB();
+    return database.pendingQuestions[id];
+  },
+
+  listPendingQuestions() {
+    return Object.values(database.pendingQuestions || {}).filter(q => q.status === 'pending');
+  },
+
+  resolvePendingQuestion(id, resolution = {}) {
+    if (database.pendingQuestions && database.pendingQuestions[id]) {
+      database.pendingQuestions[id].status = 'resolved';
+      database.pendingQuestions[id].resolvedAt = new Date().toISOString();
+      database.pendingQuestions[id].resolution = resolution;
+      saveDB();
+      return database.pendingQuestions[id];
+    }
+    return null;
   }
 };

@@ -6,6 +6,19 @@ const articlesDir = path.join(kbRoot, 'articles');
 const lessonsFile = path.join(kbRoot, 'lessons/lessons.json');
 const overridesFile = path.join(__dirname, '../../data/active_overrides.json');
 
+// ─── IN-MEMORY CACHES FOR ZERO-DISK LATENCY ──────────────────────────────────
+let _cachedArticleList = null;
+let _cachedArticlesContent = new Map(); // "cat/slug" -> content
+let _cachedLessons = null;
+let _cachedOverrides = null;
+
+function invalidateMemoryCaches() {
+  _cachedArticleList = null;
+  _cachedArticlesContent.clear();
+  _cachedLessons = null;
+  _cachedOverrides = null;
+}
+
 // Ensure directories exist
 function ensureDirs() {
   const dirs = [
@@ -20,12 +33,10 @@ function ensureDirs() {
     }
   }
 
-  // Initialize lessons file if missing
   if (!fs.existsSync(lessonsFile)) {
     fs.writeFileSync(lessonsFile, JSON.stringify({}, null, 2), 'utf8');
   }
 
-  // Initialize overrides file if missing
   if (!fs.existsSync(overridesFile)) {
     fs.writeFileSync(overridesFile, JSON.stringify([], null, 2), 'utf8');
   }
@@ -41,10 +52,10 @@ module.exports = {
   // ==========================================
   // 1. ARTICLES (Deep, Structured Documents)
   // ==========================================
-  saveArticle(category, title, content) {
+  saveArticle(category, title, content, customSlug = null) {
     ensureDirs();
     const catSlug = sanitizeName(category) || 'general';
-    const titleSlug = sanitizeName(title) || 'article';
+    const titleSlug = sanitizeName(customSlug || title) || 'article';
     const catDir = path.join(articlesDir, catSlug);
 
     if (!fs.existsSync(catDir)) {
@@ -55,6 +66,8 @@ module.exports = {
     const fileData = `# Category: ${category.trim()}\n# Title: ${title.trim()}\n# Last Updated: ${new Date().toISOString()}\n\n${content.trim()}\n`;
 
     fs.writeFileSync(filePath, fileData, 'utf8');
+    invalidateMemoryCaches();
+
     return {
       success: true,
       category: catSlug,
@@ -65,38 +78,56 @@ module.exports = {
   },
 
   listArticles() {
+    if (_cachedArticleList) return _cachedArticleList;
+
     ensureDirs();
     const categories = {};
     if (!fs.existsSync(articlesDir)) return categories;
 
-    const catFolders = fs.readdirSync(articlesDir);
-    for (const folder of catFolders) {
-      const folderPath = path.join(articlesDir, folder);
-      if (fs.statSync(folderPath).isDirectory()) {
-        const files = fs.readdirSync(folderPath).filter((f) => f.endsWith('.md'));
-        categories[folder] = files.map((f) => {
-          const raw = fs.readFileSync(path.join(folderPath, f), 'utf8');
-          const titleMatch = raw.match(/# Title:\s*(.*)/i);
-          return {
-            filename: f,
-            slug: f.replace('.md', ''),
-            title: titleMatch ? titleMatch[1].trim() : f.replace('.md', ''),
-            preview: raw.slice(0, 150)
-          };
-        });
+    try {
+      const catFolders = fs.readdirSync(articlesDir);
+      for (const folder of catFolders) {
+        const folderPath = path.join(articlesDir, folder);
+        if (fs.statSync(folderPath).isDirectory()) {
+          const files = fs.readdirSync(folderPath).filter((f) => f.endsWith('.md'));
+          categories[folder] = files.map((f) => {
+            const filePath = path.join(folderPath, f);
+            const raw = fs.readFileSync(filePath, 'utf8');
+            const titleMatch = raw.match(/# Title:\s*(.*)/i);
+            const slug = f.replace('.md', '');
+            _cachedArticlesContent.set(`${folder}/${slug}`, raw);
+
+            return {
+              filename: f,
+              slug,
+              title: titleMatch ? titleMatch[1].trim() : slug,
+              preview: raw.slice(0, 150)
+            };
+          });
+        }
       }
+      _cachedArticleList = categories;
+    } catch (err) {
+      console.error('Error listing articles:', err);
     }
     return categories;
   },
 
   getArticle(category, titleOrSlug) {
-    ensureDirs();
     const catSlug = sanitizeName(category);
     const slug = sanitizeName(titleOrSlug);
-    const filePath = path.join(articlesDir, catSlug, `${slug}.md`);
+    const cacheKey = `${catSlug}/${slug}`;
 
+    if (_cachedArticlesContent.has(cacheKey)) {
+      return _cachedArticlesContent.get(cacheKey);
+    }
+
+    ensureDirs();
+    const filePath = path.join(articlesDir, catSlug, `${slug}.md`);
     if (fs.existsSync(filePath)) {
-      return fs.readFileSync(filePath, 'utf8');
+      const content = fs.readFileSync(filePath, 'utf8');
+      _cachedArticlesContent.set(cacheKey, content);
+      return content;
     }
     return null;
   },
@@ -109,6 +140,7 @@ module.exports = {
 
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
+      invalidateMemoryCaches();
       return true;
     }
     return false;
@@ -117,93 +149,103 @@ module.exports = {
   // ==========================================
   // 2. LESSONS (Fast, Atomic Facts)
   // ==========================================
-  getLessons() {
-    ensureDirs();
-    try {
-      if (fs.existsSync(lessonsFile)) {
-        return JSON.parse(fs.readFileSync(lessonsFile, 'utf8'));
-      }
-    } catch (e) {
-      console.error('Error loading lessons:', e);
-    }
-    return {};
-  },
-
   saveLesson(key, fact) {
     ensureDirs();
     const lessons = this.getLessons();
-    const cleanKey = key.trim();
-    lessons[cleanKey] = {
+    lessons[key.trim()] = {
       fact: fact.trim(),
       updatedAt: new Date().toISOString()
     };
     fs.writeFileSync(lessonsFile, JSON.stringify(lessons, null, 2), 'utf8');
-    return { key: cleanKey, fact: fact.trim() };
+    _cachedLessons = lessons;
+    return { success: true, key: key.trim(), fact: fact.trim() };
+  },
+
+  getLessons() {
+    if (_cachedLessons) return _cachedLessons;
+    ensureDirs();
+    try {
+      const raw = fs.readFileSync(lessonsFile, 'utf8');
+      _cachedLessons = JSON.parse(raw);
+      return _cachedLessons;
+    } catch {
+      return {};
+    }
   },
 
   deleteLesson(key) {
     ensureDirs();
     const lessons = this.getLessons();
-    if (lessons[key]) {
-      delete lessons[key];
+    const cleanKey = key.trim();
+    if (lessons[cleanKey]) {
+      delete lessons[cleanKey];
       fs.writeFileSync(lessonsFile, JSON.stringify(lessons, null, 2), 'utf8');
+      _cachedLessons = lessons;
       return true;
     }
     return false;
   },
 
   // ==========================================
-  // 3. BOSS OVERRIDES (High-Priority Directives)
+  // 3. OVERRIDES (Temporary Real-Time Status)
   // ==========================================
-  getOverrides() {
+  setOverride(directive, reason = '') {
     ensureDirs();
-    try {
-      if (fs.existsSync(overridesFile)) {
-        return JSON.parse(fs.readFileSync(overridesFile, 'utf8'));
-      }
-    } catch (e) {
-      console.error('Error loading overrides:', e);
-    }
-    return [];
+    const overrides = this.getOverrides();
+    const newEntry = {
+      id: Date.now().toString(36),
+      directive: directive.trim(),
+      reason: reason.trim(),
+      createdAt: new Date().toISOString()
+    };
+    overrides.push(newEntry);
+    fs.writeFileSync(overridesFile, JSON.stringify(overrides, null, 2), 'utf8');
+    _cachedOverrides = overrides;
+    return newEntry;
   },
 
   addOverride(directive, reason = '') {
+    return this.setOverride(directive, reason);
+  },
+
+  getOverrides() {
+    if (_cachedOverrides) return _cachedOverrides;
     ensureDirs();
-    const overrides = this.getOverrides();
-    const newOverride = {
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      directive: directive.trim(),
-      reason: reason.trim(),
-      createdAt: new Date().toISOString(),
-      active: true
-    };
-    overrides.push(newOverride);
-    fs.writeFileSync(overridesFile, JSON.stringify(overrides, null, 2), 'utf8');
-    return newOverride;
+    try {
+      const raw = fs.readFileSync(overridesFile, 'utf8');
+      _cachedOverrides = JSON.parse(raw);
+      return _cachedOverrides;
+    } catch {
+      return [];
+    }
   },
 
   removeOverride(idOrIndex) {
     ensureDirs();
     let overrides = this.getOverrides();
-    const initialLen = overrides.length;
+    const beforeCount = overrides.length;
 
-    // Filter by id or 1-based index
-    overrides = overrides.filter((o, idx) => {
-      if (o.id === idOrIndex) return false;
-      if (String(idx + 1) === String(idOrIndex)) return false;
-      return true;
-    });
+    if (typeof idOrIndex === 'number' || !isNaN(parseInt(idOrIndex, 10))) {
+      const idx = parseInt(idOrIndex, 10) - 1;
+      if (idx >= 0 && idx < overrides.length) {
+        overrides.splice(idx, 1);
+      }
+    } else {
+      overrides = overrides.filter((o) => o.id !== idOrIndex);
+    }
 
-    if (overrides.length < initialLen) {
+    if (overrides.length !== beforeCount) {
       fs.writeFileSync(overridesFile, JSON.stringify(overrides, null, 2), 'utf8');
+      _cachedOverrides = overrides;
       return true;
     }
     return false;
   },
 
-  clearAllOverrides() {
+  clearOverrides() {
     ensureDirs();
     fs.writeFileSync(overridesFile, JSON.stringify([], null, 2), 'utf8');
+    _cachedOverrides = [];
     return true;
   }
 };

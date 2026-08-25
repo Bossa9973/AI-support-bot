@@ -58,15 +58,25 @@ knowledge-base/
 
 ## 🚀 Quick Setup
 
-1. Configure [`.env`](file:///root/AI%20support%20bot/.env):
+1. Configure [`.env`](file:///d:/Downloads/AI-support-bot-main/.env):
    ```env
    DISCORD_TOKEN=your_token
    CLIENT_ID=your_client_id
    GUILD_ID=your_guild_id
    OWNER_ID=your_personal_discord_id  # 👈 Enables Boss DMs
-   OPENROUTER_API_KEY=your_key
-   OPENROUTER_MODEL=stealth/ox-alpha
    SUPPORT_ROLE_ID=your_role_id
+
+   # AI Provider Option A: OpenRouter (Default)
+   OPENROUTER_ENABLED=1
+   OPENROUTER_API_KEY=your_openrouter_key
+   OPENROUTER_MODEL=stealth/ox-alpha
+
+   # AI Provider Option B: NVIDIA NIM
+   # Set NVIDIA_ENABLED=1 and OPENROUTER_ENABLED=0 to switch:
+   NVIDIA_ENABLED=0
+   NVIDIA_API_KEY=nvapi-your_nvidia_key
+   NVIDIA_MODEL=meta/llama-3.3-70b-instruct
+   NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
    ```
 2. Start the bot:
    ```bash

@@ -18,12 +18,12 @@ const testOverride = knowledgeManager.addOverride(
 );
 console.log('Created Override ID:', testOverride.id);
 
-let contextWithOverride = getKnowledgeContext();
+let contextWithOverride = getKnowledgeContext(true);
 console.log('Contains Boss Directive in context:', contextWithOverride.includes('Feature A is currently under maintenance') ? 'PASS' : 'FAIL');
 
 // Remove the test override
 knowledgeManager.removeOverride(testOverride.id);
-console.log('Removed Test Override:', !getKnowledgeContext().includes('Feature A is currently under maintenance') ? 'PASS' : 'FAIL');
+console.log('Removed Test Override:', !getKnowledgeContext(true).includes('Feature A is currently under maintenance') ? 'PASS' : 'FAIL');
 
 console.log('\n--- 3. Testing Priority Classification & Parser Logic ---');
 

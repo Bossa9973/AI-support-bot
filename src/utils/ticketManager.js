@@ -120,25 +120,33 @@ module.exports = {
     db.closeTicket(channel.id);
 
     try {
-      // 1. Lock user permissions in channel
-      await channel.permissionOverwrites.edit(ticketData.userId, {
-        SendMessages: false
-      });
+      // 1. Lock user permissions in channel safely
+      if (ticketData.userId) {
+        await channel.permissionOverwrites.edit(ticketData.userId, {
+          SendMessages: false
+        }).catch((err) => console.warn('Could not update permission overwrites on close:', err.message));
+      }
 
       // Rename channel to closed
       const formattedNum = String(ticketData.ticketNumber).padStart(4, '0');
-      await channel.setName(`closed-${formattedNum}`).catch(() => {});
+      await channel.setName(`closed-${formattedNum}`).catch((err) => console.warn('Could not rename channel on close:', err.message));
 
-      // 2. Generate transcript
-      const transcriptAttachment = await generateTranscript(channel);
+      // 2. Generate transcript safely
+      let transcriptAttachment = null;
+      try {
+        transcriptAttachment = await generateTranscript(channel);
+      } catch (err) {
+        console.warn('Transcript generation notice:', err.message);
+      }
+
       const messages = await channel.messages.fetch({ limit: 100 }).catch(() => new Map());
 
       // 3. Post closed controls in channel
       const closedControls = embedBuilder.createClosedControls(closedByUser.id);
-      await channel.send(closedControls);
+      await channel.send(closedControls).catch((err) => console.error('Error sending closedControls:', err));
 
       // 4. Send transcript to Logs channel if configured
-      if (config.tickets.transcriptChannelId) {
+      if (transcriptAttachment && config.tickets.transcriptChannelId) {
         const logChannel = channel.guild.channels.cache.get(config.tickets.transcriptChannelId);
         if (logChannel && logChannel.isTextBased()) {
           const logEmbed = embedBuilder.createTranscriptLogEmbed(ticketData, closedByUser, messages.size);
@@ -150,14 +158,26 @@ module.exports = {
       }
 
       // 5. Send transcript to user via DM
-      const ticketUser = await channel.client.users.fetch(ticketData.userId).catch(() => null);
-      if (ticketUser) {
-        ticketUser.send({
-          content: `Your support ticket in **${channel.guild.name}** has been closed. Here is your transcript:`,
-          files: [transcriptAttachment]
-        }).catch(() => {
-          // User DMs may be closed, ignore
+      if (transcriptAttachment && ticketData.userId) {
+        const ticketUser = await channel.client.users.fetch(ticketData.userId).catch(() => null);
+        if (ticketUser) {
+          await ticketUser.send({
+            content: `Your support ticket in **${channel.guild.name}** has been closed. Here is your transcript:`,
+            files: [transcriptAttachment]
+          }).catch(() => {
+            // User DMs may be closed, ignore
+          });
+        }
+      }
+
+      // 6. Inspect ticket transcript for self-learning & knowledge discovery (non-blocking)
+      try {
+        const { inspectTicketTranscript } = require('../ai/selfLearning');
+        inspectTicketTranscript(channel.client, ticketData, messages).catch((err) => {
+          console.warn('[SelfLearning] Background transcript inspection error:', err.message);
         });
+      } catch (inspectErr) {
+        console.warn('[SelfLearning] Could not initiate transcript inspection:', inspectErr.message);
       }
 
       return { success: true };
@@ -207,5 +227,104 @@ module.exports = {
     setTimeout(async () => {
       await channel.delete(`Ticket deleted by ${deletedByUser.tag}`).catch(console.error);
     }, 5000);
+  },
+
+  /**
+   * Sorts the ticket into the corresponding priority Discord category.
+   */
+  async sortTicketIntoCategory(channel, priority) {
+    if (!channel || !channel.guild) return;
+    const guild = channel.guild;
+    const normPriority = (priority || 'green').toLowerCase();
+
+    let targetCategoryName = '🟢 Standard Tickets';
+    let searchKeywords = ['standard', 'green'];
+    if (normPriority === 'red') {
+      targetCategoryName = '🔴 Critical Emergency';
+      searchKeywords = ['critical', 'emergency', 'red'];
+    } else if (normPriority === 'yellow' || normPriority === 'orange') {
+      targetCategoryName = '🟡 Elevated Tickets';
+      searchKeywords = ['elevated', 'yellow', 'orange'];
+    }
+
+    try {
+      // 1. Search existing categories in guild
+      let targetCat = guild.channels.cache.find(
+        (c) =>
+          c.type === ChannelType.GuildCategory &&
+          searchKeywords.some((kw) => c.name.toLowerCase().includes(kw))
+      );
+
+      // 2. If category doesn't exist, create it
+      if (!targetCat) {
+        const permissionOverwrites = [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          {
+            id: guild.members.me.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.SendMessages
+            ]
+          }
+        ];
+
+        if (config.tickets.supportRoleId && guild.roles.cache.has(config.tickets.supportRoleId)) {
+          permissionOverwrites.push({
+            id: config.tickets.supportRoleId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory
+            ]
+          });
+        }
+
+        targetCat = await guild.channels.create({
+          name: targetCategoryName,
+          type: ChannelType.GuildCategory,
+          permissionOverwrites
+        }).catch((err) => {
+          console.warn(`Could not create category ${targetCategoryName}:`, err.message);
+          return null;
+        });
+      }
+
+      // 3. Move channel into target category if found
+      if (targetCat && channel.parentId !== targetCat.id) {
+        await channel.setParent(targetCat.id, { lockPermissions: false }).catch((err) => {
+          console.warn(`Could not move channel to category ${targetCat.name}:`, err.message);
+        });
+      }
+    } catch (err) {
+      console.warn('Error sorting ticket into category:', err.message);
+    }
+  },
+
+  /**
+   * Renames ticket with priority emoji and summarized slug, e.g. 🟢-vps-network-issue
+   */
+  async updateTicketNameAndPriority(channel, priority, slug) {
+    const normPriority = (priority || 'green').toLowerCase();
+    const emoji = normPriority === 'red' ? '🔴' : normPriority === 'yellow' ? '🟡' : '🟢';
+
+    const cleanSlug = (slug || 'support-request')
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 35) || 'support-request';
+
+    const newChannelName = `${emoji}-${cleanSlug}`;
+
+    await channel.setName(newChannelName).catch((err) => {
+      console.warn(`Could not rename channel to ${newChannelName}:`, err.message);
+    });
+
+    // Also sort into Discord category
+    await this.sortTicketIntoCategory(channel, priority);
   }
 };

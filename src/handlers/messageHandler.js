@@ -1,8 +1,17 @@
-const { PermissionFlagsBits } = require('discord.js');
+const {
+  PermissionFlagsBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require('discord.js');
 const db = require('../database/db');
 const config = require('../config');
-const { generateSupportResponse } = require('../ai/openrouter');
+const { generateSupportResponseStream } = require('../ai/openrouter');
+const { checkAndLearn, sendKnowledgeQuestionToOwner } = require('../ai/selfLearning');
 const embedBuilder = require('../utils/embedBuilder');
+const ticketManager = require('../utils/ticketManager');
+const aiQueue = require('../utils/aiQueue');
+const resolutionManager = require('../utils/resolutionManager');
 
 /**
  * Splits long message content into Discord-safe chunks (max 2000 chars each).
@@ -34,9 +43,13 @@ function splitMessage(str, maxLen = 1950) {
  */
 function isStaffMember(member) {
   if (!member) return false;
+  if (config.tickets.supportRoleId && member.roles.cache.has(config.tickets.supportRoleId)) {
+    return true;
+  }
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
-  if (config.tickets.supportRoleId && member.roles.cache.has(config.tickets.supportRoleId)) {
+  if (member.guild && member.guild.ownerId === member.id) return true;
+  if (config.ownerId === member.id || (config.ownerIds && config.ownerIds.includes(member.id))) {
     return true;
   }
   return false;
@@ -55,96 +68,270 @@ module.exports = {
     const ticket = db.getTicket(message.channel.id);
     if (!ticket || ticket.status === 'closed') return;
 
-    // 3. Check for Staff / Admin Message (Implicit Handover)
-    if (isStaffMember(message.member)) {
-      // If the ticket was not claimed by this staff member yet, claim it automatically!
+    const isTicketCreator = ticket.userId === message.author.id;
+    const isStaff = isStaffMember(message.member);
+
+    // 3. Staff / Admin Message (Implicit Takeover)
+    // When staff sends a message in a user's ticket, claim it and stop AI
+    if (isStaff && !isTicketCreator) {
       if (ticket.claimedBy !== message.author.id) {
         db.claimTicket(message.channel.id, message.author.id);
+        db.updateTicket(message.channel.id, { continueWithAi: false });
+
+        const transferBtn = new ButtonBuilder()
+          .setCustomId('ticket_transfer')
+          .setLabel('Transfer Ticket')
+          .setEmoji('🔄')
+          .setStyle(ButtonStyle.Secondary);
+
+        const closeBtn = new ButtonBuilder()
+          .setCustomId('ticket_close_request')
+          .setLabel('Close')
+          .setEmoji('🔒')
+          .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(transferBtn, closeBtn);
+
         await message.channel.send({
-          content: `🙋‍♂️ **Staff Takeover**: <@${message.author.id}> has joined the ticket and will be assisting directly.`
+          content: `🙋‍♂️ **Staff Takeover**: <@${message.author.id}> has joined the ticket and will be assisting directly.`,
+          components: [row]
         }).catch(console.error);
       }
-      // Stop AI from responding to staff messages
+      // AI stops responding to staff messages
       return;
     }
 
-    // 4. If ticket is already claimed by a human staff member, allow human chat without AI interruption
-    if (ticket.claimedBy && !message.mentions.has(message.client.user)) {
-      return;
+    // 4. If ticket is claimed by a staff member (and continueWithAi is false), AI stops replying unless directly tagged
+    if (ticket.claimedBy && !ticket.continueWithAi) {
+      if (!message.mentions.has(message.client.user)) {
+        return;
+      }
     }
+
+    // Clear any pending inactivity auto-close timer since the user is actively messaging
+    resolutionManager.clearTimers(message.channel.id);
 
     try {
-      // 5. Trigger typing indicator
-      await message.channel.sendTyping();
+      // 5. Fire typing indicator AND history fetch simultaneously — before entering the queue
+      message.channel.sendTyping().catch(() => {});
+      const typingInterval = setInterval(() => {
+        message.channel.sendTyping().catch(() => {});
+      }, 8000);
 
-      // 6. Fetch recent messages for conversation context
-      const fetchedMessages = await message.channel.messages.fetch({ limit: 15 });
-      const history = [];
-
-      const sorted = Array.from(fetchedMessages.values()).sort(
-        (a, b) => a.createdTimestamp - b.createdTimestamp
-      );
-
-      for (const msg of sorted) {
-        if (msg.id === message.id) continue;
-        if (!msg.content) continue;
-
-        const role = msg.author.id === message.client.user.id ? 'assistant' : 'user';
-        history.push({ role, content: `${msg.author.username}: ${msg.content}` });
-      }
-
-      // 7. Generate AI response (with intelligent handoff & priority assessment)
-      const aiResult = await generateSupportResponse(
-        history,
-        message.content,
-        message.author.username
-      );
-
-      // 8. Send the direct reply to the user
-      const chunks = splitMessage(aiResult.reply);
-      for (const chunk of chunks) {
-        await message.channel.send({
-          content: chunk,
-          allowedMentions: { repliedUser: false }
-        });
-      }
-
-      // 9. If AI determined that Staff Handoff is required
-      if (aiResult.handoff) {
-        const priority = aiResult.priority || 'green';
-
-        // Tag admin/support role + send prioritized summary embed with "Claim Ticket" button
-        const handoffEmbed = embedBuilder.createStaffHandoffEmbed(
-          aiResult.summary,
-          priority,
-          config.tickets.supportRoleId
+      // Pre-fetch history immediately (runs in parallel while waiting for queue slot)
+      const historyPromise = message.channel.messages.fetch({ limit: 8 }).then((fetchedMessages) => {
+        const history = [];
+        const sorted = Array.from(fetchedMessages.values()).sort(
+          (a, b) => a.createdTimestamp - b.createdTimestamp
         );
+        for (const msg of sorted) {
+          if (msg.id === message.id) continue;
+          if (!msg.content && msg.author.id !== message.client.user.id) continue;
+          const role = msg.author.id === message.client.user.id ? 'assistant' : 'user';
+          history.push({ role, content: `${msg.author.username}: ${msg.content || '[sent an attachment]'}` });
+        }
+        return history;
+      }).catch(() => []);
 
-        // For Critical Red emergencies, send an extra urgent alert notice
-        if (priority === 'red') {
-          const emergencyTag = config.tickets.supportRoleId
-            ? `<@&${config.tickets.supportRoleId}> 🚨 **CRITICAL EMERGENCY ALERT**`
-            : '🚨 **CRITICAL EMERGENCY ALERT**';
-          
-          await message.channel.send({ content: emergencyTag, ...handoffEmbed });
-        } else {
-          await message.channel.send(handoffEmbed);
+      // 6. Enqueue AI work for this channel (serial per-channel, parallel across channels)
+      await aiQueue.run(message.channel.id, async () => {
+        // 6a. Await pre-fetched history (likely already done by now)
+        const history = await historyPromise;
+
+        // 6b. Parse attachments from the current message
+        const imageUrls = [];
+        let inlineText = '';
+        for (const [, attachment] of message.attachments) {
+          const ct = (attachment.contentType || '').toLowerCase();
+          const name = (attachment.name || '').toLowerCase();
+          if (ct.startsWith('image/')) {
+            imageUrls.push(attachment.url);
+          } else if (
+            ct.startsWith('text/') ||
+            name.endsWith('.txt') || name.endsWith('.log') ||
+            name.endsWith('.json') || name.endsWith('.yaml') ||
+            name.endsWith('.yml') || name.endsWith('.conf') ||
+            name.endsWith('.sh') || name.endsWith('.py') ||
+            name.endsWith('.js') || name.endsWith('.md')
+          ) {
+            try {
+              const res = await fetch(attachment.url);
+              const text = await res.text();
+              const trimmed = text.slice(0, 4000);
+              inlineText += `\n\n[Attached file: ${attachment.name}]\n\`\`\`\n${trimmed}${text.length > 4000 ? '\n... (truncated)' : ''}\n\`\`\``;
+            } catch (fetchErr) {
+              console.error('Failed to fetch text attachment:', fetchErr.message);
+            }
+          }
         }
 
-        // Update database state with priority
-        db.updateTicket(message.channel.id, {
-          status: 'needs_staff',
-          priority: priority,
-          lastSummary: aiResult.summary
-        });
+        const fullUserQuery = (message.content || '') + inlineText;
 
-        // Update channel topic to reflect priority badge
-        const priorityEmoji = priority === 'red' ? '🔴' : (priority === 'yellow' ? '🟡' : '🟢');
-        const formattedNum = String(ticket.ticketNumber || 1).padStart(4, '0');
-        message.channel.setTopic(
-          `${priorityEmoji} [${priority.toUpperCase()}] Ticket #${formattedNum} | ${aiResult.summary.slice(0, 100)}`
-        ).catch(() => {});
-      }
+        // 6c. Build ticket state
+        const ticketState = {
+          escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
+          priority: ticket.priority || 'green',
+          lastSummary: ticket.lastSummary || ''
+        };
+
+        const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');
+        const isExplicitCloseRequest =
+          trimmedQuery === 'close the ticket' ||
+          trimmedQuery === 'close ticket' ||
+          trimmedQuery === 'close please' ||
+          trimmedQuery === 'close this ticket' ||
+          trimmedQuery === 'please close the ticket' ||
+          trimmedQuery === 'close it';
+
+        // Check if last bot message asked about closing and user affirmed with yea/yes/sure
+        const lastBotMsg = [...history].reverse().find(m => m.role === 'assistant');
+        const botAskedToClose = lastBotMsg && (
+          lastBotMsg.content.toLowerCase().includes('close the ticket') ||
+          lastBotMsg.content.toLowerCase().includes('close this ticket') ||
+          lastBotMsg.content.toLowerCase().includes('is that okay')
+        );
+        const isAffirmativeClose = botAskedToClose && (
+          trimmedQuery === 'yea' ||
+          trimmedQuery === 'yeah' ||
+          trimmedQuery === 'yes' ||
+          trimmedQuery === 'yep' ||
+          trimmedQuery === 'sure' ||
+          trimmedQuery === 'ok' ||
+          trimmedQuery === 'okay'
+        );
+
+        if (isExplicitCloseRequest || isAffirmativeClose) {
+          clearInterval(typingInterval);
+          resolutionManager.clearTimers(message.channel.id);
+          await message.channel.send({
+            content: 'Closing this ticket now. Let us know if you need anything else later.'
+          });
+          await ticketManager.closeTicket(message.channel, message.author, 'Closed by user request');
+          return;
+        }
+
+        // 6d. Generate AI response
+        let streamBuffer = '';
+        let aiResult;
+        try {
+          aiResult = await generateSupportResponseStream(
+            history,
+            fullUserQuery,
+            message.author.username,
+            ticketState,
+            imageUrls,
+            (token) => { streamBuffer += token; }
+          );
+        } finally {
+          clearInterval(typingInterval);
+        }
+
+        // 6e. Send the complete reply if not empty
+        if (aiResult.reply && aiResult.reply.trim()) {
+          const finalChunks = splitMessage(aiResult.reply);
+          for (const chunk of finalChunks) {
+            if (chunk && chunk.trim()) {
+              await message.channel.send({
+                content: chunk,
+                allowedMentions: { repliedUser: false }
+              }).catch(console.error);
+            }
+          }
+        } else if (aiResult.closeTicket) {
+          await message.channel.send({
+            content: 'Closing this ticket now. Let us know if you need anything else later.'
+          }).catch(console.error);
+        }
+
+        // 6f. If the AI determined the ticket issue is fully resolved and user confirmed closing
+        if (aiResult.closeTicket) {
+          resolutionManager.clearTimers(message.channel.id);
+          const reason = aiResult.closeReason || 'Issue resolved by AI support';
+          await ticketManager.closeTicket(message.channel, message.client.user, reason);
+          return;
+        }
+
+        // 6g. If the AI solved the question and wants to prompt user for resolution / start 5m timer
+        if (aiResult.resolvePrompt && !ticketState.escalated && !aiResult.handoff) {
+          await resolutionManager.startResolutionFlow(message.channel, ticket.userId || message.author.id);
+        }
+
+        // 6g. If AI detected a knowledge gap, proactively ask the Owner via DM for clarification
+        if (aiResult.knowledgeGap && !ticketState.escalated) {
+          sendKnowledgeQuestionToOwner(message.client, {
+            ticketNumber: ticket.ticketNumber,
+            channelId: message.channel.id,
+            guildId: message.guild.id,
+            topic: aiResult.knowledgeGap.topic,
+            question: aiResult.knowledgeGap.question,
+            userQuery: fullUserQuery
+          }).catch((err) => console.error('[MessageHandler] sendKnowledgeQuestionToOwner error:', err.message));
+        }
+
+        // 6h. Fire general self-learning in the background (non-blocking)
+        if (!ticketState.escalated) {
+          checkAndLearn(message.client, fullUserQuery, aiResult.reply, history).catch(() => {});
+        }
+
+        // 6i. Staff handoff only when strictly necessary (verified emergency, explicit user request, admin backend task)
+        if (aiResult.handoff) {
+          const priority = aiResult.priority || 'green';
+          const slug = aiResult.slug || 'support-issue';
+          await ticketManager.updateTicketNameAndPriority(message.channel, priority, slug);
+          const handoffEmbed = embedBuilder.createStaffHandoffEmbed(
+            aiResult.summary,
+            priority,
+            config.tickets.supportRoleId
+          );
+
+          const roleTag = config.tickets.supportRoleId ? `<@&${config.tickets.supportRoleId}>` : '**Staff Team**';
+          const staffAlertText = priority === 'red'
+            ? `${roleTag} 🚨 **CRITICAL EMERGENCY ALERT**\n\n${aiResult.summary}`
+            : `${roleTag} Hey! This needs you 👋\n\n${aiResult.summary}`;
+
+          await message.channel.send({ content: staffAlertText, ...handoffEmbed });
+
+          db.updateTicket(message.channel.id, {
+            status: 'needs_staff',
+            priority: priority,
+            slug: slug,
+            lastSummary: aiResult.summary
+          });
+
+          const priorityEmoji = priority === 'red' ? '🔴' : (priority === 'yellow' ? '🟡' : '🟢');
+          const formattedNum = String(ticket.ticketNumber || 1).padStart(4, '0');
+          message.channel.setTopic(
+            `${priorityEmoji} [${priority.toUpperCase()}] Ticket #${formattedNum} | ${aiResult.summary.slice(0, 100)}`
+          ).catch(() => {});
+        }
+
+        // 6i. Re-ping staff if holding mode AI detected an update
+        if (aiResult.repingStaff) {
+          const repingPriority = aiResult.priority || ticket.priority || 'green';
+          const repingEmbed = embedBuilder.createStaffHandoffEmbed(
+            `🔄 **Update from user:** ${aiResult.summary}`,
+            repingPriority,
+            config.tickets.supportRoleId
+          );
+
+          const roleTag = config.tickets.supportRoleId ? `<@&${config.tickets.supportRoleId}>` : '**Staff Team**';
+          const repingAlertText = repingPriority === 'red'
+            ? `${roleTag} 🚨 **SITUATION UPDATE — CRITICAL**\n\n${aiResult.summary}`
+            : `${roleTag} 🔄 **Ticket Update:**\n\n${aiResult.summary}`;
+
+          await message.channel.send({ content: repingAlertText, ...repingEmbed });
+
+          if (repingPriority !== ticket.priority) {
+            db.updateTicket(message.channel.id, { priority: repingPriority });
+            await ticketManager.updateTicketNameAndPriority(
+              message.channel,
+              repingPriority,
+              ticket.slug || 'support-issue'
+            );
+          }
+        }
+      }); // end aiQueue.run()
+
     } catch (error) {
       console.error('Error in ticket message handler:', error);
     }

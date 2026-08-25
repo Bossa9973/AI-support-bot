@@ -3,6 +3,72 @@ const path = require('path');
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
+function parseBool(val, defaultVal = false) {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  const s = String(val).trim().toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+}
+
+// ─── AI PROVIDER CONFIGURATIONS ───────────────────────────────────────────────
+
+const openRouterConfig = {
+  enabled: parseBool(process.env.OPENROUTER_ENABLED, true),
+  apiKey: process.env.OPENROUTER_API_KEY || '',
+  model: process.env.OPENROUTER_MODEL || 'stealth/ox-alpha',
+  baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+  siteUrl: process.env.OPENROUTER_SITE_URL || 'https://discord.gg',
+  siteName: process.env.OPENROUTER_SITE_NAME || 'Discord AI Support'
+};
+
+const nvidiaConfig = {
+  enabled: parseBool(process.env.NVIDIA_ENABLED, false),
+  apiKey: process.env.NVIDIA_API_KEY || '',
+  model: process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct',
+  baseURL: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1'
+};
+
+// Determine active provider based on explicit AI_PROVIDER or toggle flags
+let selectedProvider = 'openrouter';
+
+const explicitProvider = (process.env.AI_PROVIDER || '').trim().toLowerCase();
+if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
+  selectedProvider = 'nvidia';
+} else if (explicitProvider === 'openrouter') {
+  selectedProvider = 'openrouter';
+} else {
+  // Check toggle switches (e.g., OPENROUTER_ENABLED=0, NVIDIA_ENABLED=1)
+  if (nvidiaConfig.enabled && !openRouterConfig.enabled) {
+    selectedProvider = 'nvidia';
+  } else if (openRouterConfig.enabled && !nvidiaConfig.enabled) {
+    selectedProvider = 'openrouter';
+  } else if (nvidiaConfig.enabled && nvidiaConfig.apiKey && !openRouterConfig.apiKey) {
+    selectedProvider = 'nvidia';
+  } else {
+    selectedProvider = 'openrouter';
+  }
+}
+
+const activeAIConfig = selectedProvider === 'nvidia'
+  ? {
+      provider: 'nvidia',
+      providerName: 'NVIDIA NIM',
+      apiKey: nvidiaConfig.apiKey,
+      model: nvidiaConfig.model,
+      baseURL: nvidiaConfig.baseURL,
+      defaultHeaders: {}
+    }
+  : {
+      provider: 'openrouter',
+      providerName: 'OpenRouter',
+      apiKey: openRouterConfig.apiKey,
+      model: openRouterConfig.model,
+      baseURL: openRouterConfig.baseURL,
+      defaultHeaders: {
+        'HTTP-Referer': openRouterConfig.siteUrl,
+        'X-Title': openRouterConfig.siteName
+      }
+    };
+
 module.exports = {
   // Discord Config
   token: process.env.DISCORD_TOKEN || '',
@@ -16,13 +82,19 @@ module.exports = {
     .map((id) => id.trim())
     .filter(Boolean),
 
-  // OpenRouter Config
+  // Active AI Config
+  ai: activeAIConfig,
+
+  // Provider specific blocks
   openRouter: {
-    apiKey: process.env.OPENROUTER_API_KEY || '',
-    model: process.env.OPENROUTER_MODEL || 'stealth/ox-alpha',
-    siteUrl: process.env.OPENROUTER_SITE_URL || 'https://discord.gg',
-    siteName: process.env.OPENROUTER_SITE_NAME || 'Discord AI Support'
+    get apiKey() { return activeAIConfig.apiKey; },
+    get model() { return activeAIConfig.model; },
+    get baseURL() { return activeAIConfig.baseURL; },
+    siteUrl: openRouterConfig.siteUrl,
+    siteName: openRouterConfig.siteName,
+    raw: openRouterConfig
   },
+  nvidia: nvidiaConfig,
 
   // Ticket Settings
   tickets: {
