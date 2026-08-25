@@ -181,7 +181,9 @@ module.exports = {
       return;
     }
 
-    await message.channel.sendTyping();
+    if (message.channel && typeof message.channel.sendTyping === 'function') {
+      await message.channel.sendTyping().catch(() => {});
+    }
 
     // 2. Direct Shortcuts / Fast Commands
     const content = message.content.trim();
@@ -255,7 +257,9 @@ module.exports = {
       if (!suggestion) {
         return message.reply(`⚠️ Couldn't find suggestion \`${suggId}\`. Use \`!suggestions\` to see pending ones.`);
       }
-      await message.channel.sendTyping();
+      if (message.channel && typeof message.channel.sendTyping === 'function') {
+        await message.channel.sendTyping().catch(() => {});
+      }
       const answer = await answerSuggestionQuestion(suggestion, question);
       const embed = new EmbedBuilder()
         .setColor('#FEE75C')

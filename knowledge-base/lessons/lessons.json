@@ -27,10 +27,6 @@
     "fact": "When a user inquires about paid VPS plans, do NOT quote pricing directly. Instead, collect their details (desired specs/resources, budget, use case, Discord contact) and escalate the inquiry to the admin staff for a personalized offer.",
     "updatedAt": "2026-08-24T19:06:24.084Z"
   },
-  "Unknown Information Escalation Protocol": {
-    "fact": "When the AI does not know an answer or lacks information on a topic, it must NOT guess or try to figure it out. Instead: (1) Summarize the entire user conversation, (2) Categorize the issue, (3) Escalate the summary to admin staff to handle.",
-    "updatedAt": "2026-08-24T20:38:16.163Z"
-  },
   "Vertex Nodes Ownership": {
     "fact": "Vertex Nodes is currently owned by Kreed, and the service was previously known as LumenHost before being sold. Beyond the owner, staff consists of administrators (handling escalated tickets, suspension reviews, refunds, reseller payout approvals, and node management) and support/moderation staff working alongside AI support.",
     "updatedAt": "2026-08-24T20:49:08.955Z"
@@ -54,5 +50,17 @@
   "Free Server CPU Hardware": {
     "fact": "Free servers run on an AMD Ryzen 9 5950X CPU.",
     "updatedAt": "2026-08-25T06:25:34.880Z"
+  },
+  "UTM": {
+    "fact": "UTM stands for Urchin Tracking Module, a web analytics tracking system.",
+    "updatedAt": "2026-08-25T11:43:36.220Z"
+  },
+  "Approved Add": {
+    "fact": "Approved add requests are processed within 24 hours. Users will receive an email notification once their request is approved.",
+    "updatedAt": "2026-08-25T11:42:28.505Z"
+  },
+  "Paid VPS Plan Inquiry": {
+    "fact": "Vertex Deployments offers paid VPS plans with varying resources and capabilities, including unmetered network bandwidth and 24/7 continuous uptime.",
+    "updatedAt": "2026-08-25T12:25:55.989Z"
   }
 }

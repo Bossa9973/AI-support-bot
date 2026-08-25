@@ -111,120 +111,144 @@ module.exports = {
     // Clear any pending inactivity auto-close timer since the user is actively messaging
     resolutionManager.clearTimers(message.channel.id);
 
+    let typingInterval = null;
     try {
       // 5. Fire typing indicator AND history fetch simultaneously — before entering the queue
-      message.channel.sendTyping().catch(() => {});
-      const typingInterval = setInterval(() => {
+      if (message.channel && typeof message.channel.sendTyping === 'function') {
         message.channel.sendTyping().catch(() => {});
-      }, 8000);
+        typingInterval = setInterval(() => {
+          try {
+            if (message && message.channel && typeof message.channel.sendTyping === 'function') {
+              message.channel.sendTyping().catch(() => {});
+            } else if (typingInterval) {
+              clearInterval(typingInterval);
+              typingInterval = null;
+            }
+          } catch (e) {
+            if (typingInterval) {
+              clearInterval(typingInterval);
+              typingInterval = null;
+            }
+          }
+        }, 8000);
+      }
 
       // Pre-fetch history immediately (runs in parallel while waiting for queue slot)
-      const historyPromise = message.channel.messages.fetch({ limit: 8 }).then((fetchedMessages) => {
-        const history = [];
-        const sorted = Array.from(fetchedMessages.values()).sort(
-          (a, b) => a.createdTimestamp - b.createdTimestamp
-        );
-        for (const msg of sorted) {
-          if (msg.id === message.id) continue;
-          if (!msg.content && msg.author.id !== message.client.user.id) continue;
-          const role = msg.author.id === message.client.user.id ? 'assistant' : 'user';
-          history.push({ role, content: `${msg.author.username}: ${msg.content || '[sent an attachment]'}` });
-        }
-        return history;
-      }).catch(() => []);
+      const historyPromise = message.channel && message.channel.messages
+        ? message.channel.messages.fetch({ limit: 8 }).then((fetchedMessages) => {
+            const history = [];
+            const sorted = Array.from(fetchedMessages.values()).sort(
+              (a, b) => a.createdTimestamp - b.createdTimestamp
+            );
+            for (const msg of sorted) {
+              if (msg.id === message.id) continue;
+              if (!msg.content && msg.author.id !== message.client.user.id) continue;
+              const role = msg.author.id === message.client.user.id ? 'assistant' : 'user';
+              history.push({ role, content: `${msg.author.username}: ${msg.content || '[sent an attachment]'}` });
+            }
+            return history;
+          }).catch(() => [])
+        : Promise.resolve([]);
 
       // 6. Enqueue AI work for this channel (serial per-channel, parallel across channels)
       await aiQueue.run(message.channel.id, async () => {
-        // 6a. Await pre-fetched history (likely already done by now)
-        const history = await historyPromise;
+        try {
+          // 6a. Await pre-fetched history (likely already done by now)
+          const history = await historyPromise;
 
-        // 6b. Parse attachments from the current message
-        const imageUrls = [];
-        let inlineText = '';
-        for (const [, attachment] of message.attachments) {
-          const ct = (attachment.contentType || '').toLowerCase();
-          const name = (attachment.name || '').toLowerCase();
-          if (ct.startsWith('image/')) {
-            imageUrls.push(attachment.url);
-          } else if (
-            ct.startsWith('text/') ||
-            name.endsWith('.txt') || name.endsWith('.log') ||
-            name.endsWith('.json') || name.endsWith('.yaml') ||
-            name.endsWith('.yml') || name.endsWith('.conf') ||
-            name.endsWith('.sh') || name.endsWith('.py') ||
-            name.endsWith('.js') || name.endsWith('.md')
-          ) {
-            try {
-              const res = await fetch(attachment.url);
-              const text = await res.text();
-              const trimmed = text.slice(0, 4000);
-              inlineText += `\n\n[Attached file: ${attachment.name}]\n\`\`\`\n${trimmed}${text.length > 4000 ? '\n... (truncated)' : ''}\n\`\`\``;
-            } catch (fetchErr) {
-              console.error('Failed to fetch text attachment:', fetchErr.message);
+          // 6b. Parse attachments from the current message
+          const imageUrls = [];
+          let inlineText = '';
+          for (const [, attachment] of message.attachments) {
+            const ct = (attachment.contentType || '').toLowerCase();
+            const name = (attachment.name || '').toLowerCase();
+            if (ct.startsWith('image/')) {
+              imageUrls.push(attachment.url);
+            } else if (
+              ct.startsWith('text/') ||
+              name.endsWith('.txt') || name.endsWith('.log') ||
+              name.endsWith('.json') || name.endsWith('.yaml') ||
+              name.endsWith('.yml') || name.endsWith('.conf') ||
+              name.endsWith('.sh') || name.endsWith('.py') ||
+              name.endsWith('.js') || name.endsWith('.md')
+            ) {
+              try {
+                const res = await fetch(attachment.url);
+                const text = await res.text();
+                const trimmed = text.slice(0, 4000);
+                inlineText += `\n\n[Attached file: ${attachment.name}]\n\`\`\`\n${trimmed}${text.length > 4000 ? '\n... (truncated)' : ''}\n\`\`\``;
+              } catch (fetchErr) {
+                console.error('Failed to fetch text attachment:', fetchErr.message);
+              }
             }
           }
-        }
 
-        const fullUserQuery = (message.content || '') + inlineText;
+          const fullUserQuery = (message.content || '') + inlineText;
 
-        // 6c. Build ticket state
-        const ticketState = {
-          escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
-          priority: ticket.priority || 'green',
-          lastSummary: ticket.lastSummary || ''
-        };
+          // 6c. Build ticket state
+          const ticketState = {
+            escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
+            priority: ticket.priority || 'green',
+            lastSummary: ticket.lastSummary || ''
+          };
 
-        const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');
-        const isExplicitCloseRequest =
-          trimmedQuery === 'close the ticket' ||
-          trimmedQuery === 'close ticket' ||
-          trimmedQuery === 'close please' ||
-          trimmedQuery === 'close this ticket' ||
-          trimmedQuery === 'please close the ticket' ||
-          trimmedQuery === 'close it';
+          const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');
+          const isExplicitCloseRequest =
+            trimmedQuery === 'close the ticket' ||
+            trimmedQuery === 'close ticket' ||
+            trimmedQuery === 'close please' ||
+            trimmedQuery === 'close this ticket' ||
+            trimmedQuery === 'please close the ticket' ||
+            trimmedQuery === 'close it';
 
-        // Check if last bot message asked about closing and user affirmed with yea/yes/sure
-        const lastBotMsg = [...history].reverse().find(m => m.role === 'assistant');
-        const botAskedToClose = lastBotMsg && (
-          lastBotMsg.content.toLowerCase().includes('close the ticket') ||
-          lastBotMsg.content.toLowerCase().includes('close this ticket') ||
-          lastBotMsg.content.toLowerCase().includes('is that okay')
-        );
-        const isAffirmativeClose = botAskedToClose && (
-          trimmedQuery === 'yea' ||
-          trimmedQuery === 'yeah' ||
-          trimmedQuery === 'yes' ||
-          trimmedQuery === 'yep' ||
-          trimmedQuery === 'sure' ||
-          trimmedQuery === 'ok' ||
-          trimmedQuery === 'okay'
-        );
-
-        if (isExplicitCloseRequest || isAffirmativeClose) {
-          clearInterval(typingInterval);
-          resolutionManager.clearTimers(message.channel.id);
-          await message.channel.send({
-            content: 'Closing this ticket now. Let us know if you need anything else later.'
-          });
-          await ticketManager.closeTicket(message.channel, message.author, 'Closed by user request');
-          return;
-        }
-
-        // 6d. Generate AI response
-        let streamBuffer = '';
-        let aiResult;
-        try {
-          aiResult = await generateSupportResponseStream(
-            history,
-            fullUserQuery,
-            message.author.username,
-            ticketState,
-            imageUrls,
-            (token) => { streamBuffer += token; }
+          // Check if last bot message asked about closing and user affirmed with yea/yes/sure
+          const lastBotMsg = [...history].reverse().find(m => m.role === 'assistant');
+          const botAskedToClose = lastBotMsg && (
+            lastBotMsg.content.toLowerCase().includes('close the ticket') ||
+            lastBotMsg.content.toLowerCase().includes('close this ticket') ||
+            lastBotMsg.content.toLowerCase().includes('is that okay')
           );
-        } finally {
-          clearInterval(typingInterval);
-        }
+          const isAffirmativeClose = botAskedToClose && (
+            trimmedQuery === 'yea' ||
+            trimmedQuery === 'yeah' ||
+            trimmedQuery === 'yes' ||
+            trimmedQuery === 'yep' ||
+            trimmedQuery === 'sure' ||
+            trimmedQuery === 'ok' ||
+            trimmedQuery === 'okay'
+          );
+
+          if (isExplicitCloseRequest || isAffirmativeClose) {
+            if (typingInterval) {
+              clearInterval(typingInterval);
+              typingInterval = null;
+            }
+            resolutionManager.clearTimers(message.channel.id);
+            await message.channel.send({
+              content: 'Closing this ticket now. Let us know if you need anything else later.'
+            });
+            await ticketManager.closeTicket(message.channel, message.author, 'Closed by user request');
+            return;
+          }
+
+          // 6d. Generate AI response
+          let streamBuffer = '';
+          let aiResult;
+          try {
+            aiResult = await generateSupportResponseStream(
+              history,
+              fullUserQuery,
+              message.author.username,
+              ticketState,
+              imageUrls,
+              (token) => { streamBuffer += token; }
+            );
+          } finally {
+            if (typingInterval) {
+              clearInterval(typingInterval);
+              typingInterval = null;
+            }
+          }
 
         // 6e. Send the complete reply if not empty
         if (aiResult.reply && aiResult.reply.trim()) {
@@ -334,6 +358,11 @@ module.exports = {
 
     } catch (error) {
       console.error('Error in ticket message handler:', error);
+    } finally {
+      if (typingInterval) {
+        clearInterval(typingInterval);
+        typingInterval = null;
+      }
     }
   }
 };
