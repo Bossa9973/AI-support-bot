@@ -114,24 +114,25 @@ module.exports = {
     let typingInterval = null;
     try {
       // 5. Fire typing indicator AND history fetch simultaneously — before entering the queue
-      if (message.channel && typeof message.channel.sendTyping === 'function') {
-        message.channel.sendTyping().catch(() => {});
-        typingInterval = setInterval(() => {
-          try {
-            if (message && message.channel && typeof message.channel.sendTyping === 'function') {
-              message.channel.sendTyping().catch(() => {});
-            } else if (typingInterval) {
-              clearInterval(typingInterval);
-              typingInterval = null;
-            }
-          } catch (e) {
-            if (typingInterval) {
-              clearInterval(typingInterval);
-              typingInterval = null;
-            }
+      try {
+        message?.channel?.sendTyping?.().catch(() => {});
+      } catch (_) {}
+
+      typingInterval = setInterval(() => {
+        try {
+          if (message?.channel && typeof message.channel.sendTyping === 'function') {
+            message.channel.sendTyping().catch(() => {});
+          } else if (typingInterval) {
+            clearInterval(typingInterval);
+            typingInterval = null;
           }
-        }, 8000);
-      }
+        } catch (_) {
+          if (typingInterval) {
+            clearInterval(typingInterval);
+            typingInterval = null;
+          }
+        }
+      }, 8000);
 
       // Pre-fetch history immediately (runs in parallel while waiting for queue slot)
       const historyPromise = message.channel && message.channel.messages
