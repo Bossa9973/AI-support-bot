@@ -1,6 +1,6 @@
 # Category: Boost Rewards
 # Title: How to Claim Discord Server Boost Rewards
-# Last Updated: 2026-08-24T18:31:03.744Z
+# Last Updated: 2026-08-26T22:37:12.962Z
 
 ## Claiming Your Boost Rewards
 

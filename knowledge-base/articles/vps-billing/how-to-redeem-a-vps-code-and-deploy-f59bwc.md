@@ -1,6 +1,6 @@
 # Category: VPS & Billing
 # Title: How to Redeem a VPS Code and Deploy
-# Last Updated: 2026-08-24T18:31:03.741Z
+# Last Updated: 2026-08-26T22:37:12.961Z
 
 Once you have a VPS code:
 

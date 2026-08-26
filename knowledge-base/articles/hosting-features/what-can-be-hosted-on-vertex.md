@@ -1,6 +1,6 @@
 # Category: Hosting Features
 # Title: What can be hosted on vertex
-# Last Updated: 2026-08-24T18:31:03.750Z
+# Last Updated: 2026-08-26T22:37:12.966Z
 
 # [SYSTEM_PROMPT_KNOWLEDGE_BASE]: Vertex Panel Infrastructure Sizing & Routing Engine
 

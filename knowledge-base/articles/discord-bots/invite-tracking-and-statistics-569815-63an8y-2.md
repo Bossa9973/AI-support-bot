@@ -1,6 +1,6 @@
 # Category: Discord Bots
 # Title: Invite Tracking and Statistics
-# Last Updated: 2026-08-24T18:31:03.760Z
+# Last Updated: 2026-08-26T22:37:12.974Z
 
 Invite tracking bots provide detailed metrics:
 - **Joins**: Actual new member joins

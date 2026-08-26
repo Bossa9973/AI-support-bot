@@ -1,23 +1,23 @@
 {
   "Standard Support Hours": {
     "fact": "AI assistance is active 24/7. Human staff review tickets Monday through Friday 9 AM to 6 PM EST.",
-    "updatedAt": "2026-08-24T18:31:03.734Z"
+    "updatedAt": "2026-08-26T22:37:12.954Z"
   },
   "Accepted Payment Methods": {
     "fact": "Stripe, PayPal, Credit/Debit cards, and Cryptocurrencies (USDT, SOL, BTC, LTC, ETH).",
-    "updatedAt": "2026-08-24T18:31:03.736Z"
+    "updatedAt": "2026-08-26T22:37:12.955Z"
   },
   "Zero-Cost Reseller Cap": {
     "fact": "Strictly capped at 30.00% markup over base price. System retains base cost and credits markup profit to reseller balance.",
-    "updatedAt": "2026-08-24T18:31:03.736Z"
+    "updatedAt": "2026-08-26T22:37:12.956Z"
   },
   "Reseller Minimum Withdrawal": {
     "fact": "Minimum $10 USD equivalent in crypto (USDT: 10, SOL: 0.05, BTC: 0.0002, LTC: 0.15, ETH: 0.003).",
-    "updatedAt": "2026-08-24T18:31:03.737Z"
+    "updatedAt": "2026-08-26T22:37:12.957Z"
   },
   "Web Terminal 1-Click Repair": {
     "fact": "Automated diagnostic toolbar button that fixes QEMU Guest Agent serial sockets and DNS host mappings in 30 seconds.",
-    "updatedAt": "2026-08-24T18:31:03.738Z"
+    "updatedAt": "2026-08-26T22:37:12.957Z"
   },
   "VM IPv4 Allocation": {
     "fact": "Most free VMs run on a NAT network without a public IPv4 address. Only paid VMs come with a dedicated public IPv4.",

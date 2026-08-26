@@ -1,6 +1,6 @@
 # Category: Reward Claiming
 # Title: Claiming BOLTs
-# Last Updated: 2026-08-24T18:31:03.747Z
+# Last Updated: 2026-08-26T22:37:12.964Z
 
 # [SYSTEM_PROMPT_KNOWLEDGE_BASE]: Vertex Nodes Automated Rewards Claiming Protocol
 

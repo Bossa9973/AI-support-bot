@@ -362,5 +362,19 @@
     "indexingJobId": "cmt5gpmqc0005i7szso63an8y",
     "createdAt": "2026-08-23T07:05:04.106Z",
     "updatedAt": "2026-08-23T07:05:04.106Z"
+  },
+  {
+    "id": "ssh-access-guide-001",
+    "guildId": "1048279571386081451",
+    "category": "VPS & Billing",
+    "title": "How to SSH Into Your VPS (External / CMD Access)",
+    "slug": "how-to-ssh-into-your-vps",
+    "contentMd": "## Getting SSH Access to Your VPS\n\nBy default, Vertex Nodes provides browser-based terminal access via **noVNC** or **xterm.js**. These ARE terminals connected to your VPS — but if you want to connect from your own PC using a terminal or PuTTY, here's how:\n\n### Step 1: Get Your VPS IP Address\nLog into your dashboard at https://dash.vertexnodes.top and open your VM. The IP address is shown in the network/overview section.\n\n### Step 2: Connect from Your PC\nOpen CMD, PowerShell, or any terminal and run:\n```\nssh root@YOUR_VPS_IP\n```\n\n### Step 3: If SSH Connection is Refused\nThe SSH service might not be running. Use the browser terminal (noVNC/xterm.js) to fix it:\n```bash\napt install openssh-server -y\nsystemctl enable --now ssh\nufw allow 22\n```\n\n### What about tmate / SSH share links?\n**tmate is NOT provided by Vertex Nodes.** It is a third-party tool you can install yourself inside your VM:\n```bash\napt install tmate -y\ntmate\n```\nThis will generate a shareable SSH link. But for normal SSH access from your own PC, you don't need tmate — just use your VPS IP directly.\n\n### Common Issues\n- **Permission denied**: Check your password or use SSH key auth\n- **Connection timed out**: Make sure port 22 is open (`ufw allow 22`)\n- **No route to host**: Your VPS might be powered off — check the dashboard",
+    "status": "PUBLISHED",
+    "source": "MANUAL",
+    "sourceChannelId": null,
+    "indexingJobId": null,
+    "createdAt": "2026-08-25T00:00:00.000Z",
+    "updatedAt": "2026-08-25T00:00:00.000Z"
   }
 ]

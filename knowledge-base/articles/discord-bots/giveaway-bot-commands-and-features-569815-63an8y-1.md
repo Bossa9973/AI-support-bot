@@ -1,6 +1,6 @@
 # Category: Discord Bots
 # Title: Giveaway Bot Commands and Features
-# Last Updated: 2026-08-24T18:31:03.760Z
+# Last Updated: 2026-08-26T22:37:12.974Z
 
 Apollo and Falcon bots are used to manage giveaways:
 - **Apollo**: Announces giveaway start/end, displays winner announcements, handles re-rolls

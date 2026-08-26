@@ -1,6 +1,6 @@
 # Category: Invites
 # Title: What Makes an Invite Valid?
-# Last Updated: 2026-08-24T18:31:03.741Z
+# Last Updated: 2026-08-26T22:37:12.960Z
 
 ## Valid Invite Requirements
 

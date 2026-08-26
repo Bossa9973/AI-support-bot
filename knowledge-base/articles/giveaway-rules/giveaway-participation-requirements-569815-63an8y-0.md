@@ -1,6 +1,6 @@
 # Category: Giveaway Rules
 # Title: Giveaway Participation Requirements
-# Last Updated: 2026-08-24T18:31:03.761Z
+# Last Updated: 2026-08-26T22:37:12.975Z
 
 Giveaways typically require participants to meet invite requirements:
 - Must have minimum new invites (varies by giveaway, e.g., 2 new invites, 5 new invites, 10 new invites)
