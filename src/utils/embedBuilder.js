@@ -43,7 +43,7 @@ const EMOJIS = {
   closeTicket: '<:ticket_close:1541905770214334627>',
   claimTicket: '<:emoji43:1541903349429968936>',
   continueAi: '<:emoji31:1541903062514274316>',
-  transcript: '📑'
+  transcript: '<:transcript:1541905860693991445>'
 };
 
 // Helper to safely parse custom and unicode emojis for Discord components
@@ -460,11 +460,11 @@ module.exports = {
       .setTitle(`Support Ticket Closed • #${String(ticketData.ticketNumber).padStart(4, '0')}`)
       .setDescription(
         `Thank you for contacting **${guild?.name || 'Support'}**! Your support ticket has been closed.\n\n` +
-        `A complete interactive HTML transcript has been attached below for your records.`
+        `${EMOJIS.transcript} A complete interactive HTML transcript has been attached below for your records.`
       )
       .addFields([
         { name: `${EMOJIS.ticket} Ticket ID`, value: `\`#${String(ticketData.ticketNumber).padStart(4, '0')}\``, inline: true },
-        { name: '🏷️ Category', value: `${categoryData.emoji} ${categoryData.label}`, inline: true },
+        { name: `${categoryData.emoji} Category`, value: `${categoryData.label}`, inline: true },
         { name: `${EMOJIS.user} Closed By`, value: `<@${closedByUser.id}>`, inline: true },
         { name: '💬 Total Messages', value: `\`${messageCount}\``, inline: true },
         { name: '⏰ Created', value: `<t:${createdTimestamp}:R>`, inline: true }
@@ -492,10 +492,10 @@ module.exports = {
     return new EmbedBuilder()
       .setColor(BRAND_COLOR)
       .setTitle(`Ticket Archive • #${String(ticketData.ticketNumber).padStart(4, '0')}`)
-      .setDescription('A support ticket has been closed and archived. The complete HTML transcript is attached below.')
+      .setDescription(`${EMOJIS.transcript} A support ticket has been closed and archived. The complete HTML transcript is attached below.`)
       .addFields([
         { name: `${EMOJIS.ticket} Ticket ID`, value: `\`#${String(ticketData.ticketNumber).padStart(4, '0')}\``, inline: true },
-        { name: '🏷️ Category', value: `${categoryData.emoji} ${categoryData.label}`, inline: true },
+        { name: `${categoryData.emoji} Category`, value: `${categoryData.label}`, inline: true },
         { name: `${EMOJIS.user} Creator`, value: `<@${ticketData.userId}>`, inline: true },
         { name: `${EMOJIS.user} Closed By`, value: `<@${closedByUser.id}>`, inline: true },
         { name: '📊 Priority', value: `${priorityEmoji} \`${priorityLabel}\``, inline: true },
