@@ -18,40 +18,40 @@ const WARNING_COLOR = '#FEE75C';
 const DANGER_COLOR = '#ED4245';
 const DARK_PANEL_COLOR = '#2B2D31';
 
-// Custom System Emojis (Universal Unicode emojis that work reliably across all servers)
+// Custom System Emojis
 const EMOJIS = {
   // Category Emojis
-  cart: '🛒',
-  account: '👤',
-  bug: '🐛',
-  technical: '💻',
-  support: '🛠️',
-  info: 'ℹ️',
-  gift: '🎁',
+  cart: '<:cart:1541899176135237773>',
+  account: '<:emoji2:1541900863310794863>',
+  bug: '<:bug:1541903664707272804>',
+  technical: '<:Code:1541900534662045717>',
+  support: '<:support:1541899692567302296>',
+  info: '<:info:1541899910373187614>',
+  gift: '<:Gift:1541901863849431050>',
 
   // Priority Time Badges
-  emergency: '🔴', // Critical / Emergency (Red)
-  moderate: '🟠',  // Moderate / High (Orange)
-  mid: '🟡',       // Mid / Elevated (Yellow)
-  standard: '🟢',  // Low / Standard (Green)
+  emergency: '<:replace_time4:1541902633982238899>', // Critical / Emergency (Red)
+  moderate: '<:replace_time3:1541902584955150469>',  // Moderate / High (Orange)
+  mid: '<:replace_time2:1541902531259531334>',       // Mid / Elevated (Yellow)
+  standard: '<:replace_time1:1541902476779855955>',  // Low / Standard (Green)
 
   // Bot & Ticket UI Icons
-  ticket: '🎫',
-  user: '👤',
-  deleteTicket: '⛔',
-  reopenTicket: '🔓',
-  closeTicket: '🔒',
-  claimTicket: '🙋‍♂️',
-  continueAi: '🤖',
+  ticket: '<:ticket:1541904611584114689>',
+  user: '<:user:1541904678768480307>',
+  deleteTicket: '<:emoji22:1541903146807332906>',
+  reopenTicket: '<:ticket_open:1541905670536962078>',
+  closeTicket: '<:ticket_close:1541905770214334627>',
+  claimTicket: '<:emoji43:1541903349429968936>',
+  continueAi: '<:emoji31:1541903062514274316>',
   transcript: '📑'
 };
 
 // Helper to safely parse custom and unicode emojis for Discord components
 function parseEmoji(raw) {
   if (!raw) return undefined;
-  const match = String(raw).match(/<a?:([a-zA-Z0-9_]+):([0-9]+)>/);
+  const match = String(raw).match(/<(a?):([a-zA-Z0-9_]+):([0-9]+)>/);
   if (match) {
-    return { name: match[1], id: match[2] };
+    return { name: match[2], id: match[3], animated: match[1] === 'a' };
   }
   return raw;
 }
@@ -141,7 +141,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(BRAND_COLOR)
-      .setTitle(`${EMOJIS.ticket} Ticket System`)
+      .setTitle('🎫 Ticket System')
       .setDescription(
         `Please select a category below to create a ticket:\n\n${categoryListLines}`
       )
@@ -202,7 +202,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(BRAND_COLOR)
-      .setTitle(`${EMOJIS.ticket} Support Ticket • #${formattedNumber}`)
+      .setTitle(`Support Ticket • #${formattedNumber}`)
       .setDescription(
         `${formattedGreeting}\n\n` +
         `> **Selected Category**: ${categoryData.emoji} **${categoryData.label}**\n` +
@@ -412,7 +412,7 @@ module.exports = {
   createClosedControls(closedByUserId) {
     const embed = new EmbedBuilder()
       .setColor(DARK_PANEL_COLOR)
-      .setTitle(`${EMOJIS.closeTicket} Ticket Closed & Archived`)
+      .setTitle('🔒 Ticket Closed & Archived')
       .setDescription(
         `This ticket was closed by <@${closedByUserId}>.\n\n` +
         `**Staff Controls:**\n` +
@@ -457,7 +457,7 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(BRAND_COLOR)
-      .setTitle(`${EMOJIS.ticket} Support Ticket Closed • #${String(ticketData.ticketNumber).padStart(4, '0')}`)
+      .setTitle(`Support Ticket Closed • #${String(ticketData.ticketNumber).padStart(4, '0')}`)
       .setDescription(
         `Thank you for contacting **${guild?.name || 'Support'}**! Your support ticket has been closed.\n\n` +
         `A complete interactive HTML transcript has been attached below for your records.`
@@ -491,7 +491,7 @@ module.exports = {
 
     return new EmbedBuilder()
       .setColor(BRAND_COLOR)
-      .setTitle(`${EMOJIS.ticket} Ticket Archive • #${String(ticketData.ticketNumber).padStart(4, '0')}`)
+      .setTitle(`Ticket Archive • #${String(ticketData.ticketNumber).padStart(4, '0')}`)
       .setDescription('A support ticket has been closed and archived. The complete HTML transcript is attached below.')
       .addFields([
         { name: `${EMOJIS.ticket} Ticket ID`, value: `\`#${String(ticketData.ticketNumber).padStart(4, '0')}\``, inline: true },
