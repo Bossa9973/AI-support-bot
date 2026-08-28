@@ -270,7 +270,7 @@ module.exports = {
         return interaction.reply({ embeds: [errEmbed], ephemeral: true });
       }
 
-      db.updateTicket(channel.id, { continueWithAi: true, claimedBy: null });
+      db.updateTicket(channel.id, { continueWithAi: true, claimedBy: null, staffActive: false });
 
       const claimBtn = new ButtonBuilder()
         .setCustomId('ticket_claim')

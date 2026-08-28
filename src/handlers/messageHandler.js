@@ -98,7 +98,8 @@ module.exports = {
       db.updateTicket(message.channel.id, {
         staffActive: true,
         continueWithAi: false,
-        claimedBy: ticket.claimedBy || message.author.id
+        claimedBy: ticket.claimedBy || message.author.id,
+        claimedAt: ticket.claimedAt || new Date().toISOString()
       });
       return;
     }
