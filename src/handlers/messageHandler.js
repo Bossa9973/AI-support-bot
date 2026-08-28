@@ -94,6 +94,9 @@ module.exports = {
         return;
       }
 
+      // Check if this is the first message from staff taking over from AI
+      const wasAiHandling = ticket.continueWithAi !== false && !ticket.claimedBy;
+
       // Automatic handover: when staff speaks in a ticket, pause AI and assign staff control
       db.updateTicket(message.channel.id, {
         staffActive: true,
@@ -101,6 +104,38 @@ module.exports = {
         claimedBy: ticket.claimedBy || message.author.id,
         claimedAt: ticket.claimedAt || new Date().toISOString()
       });
+
+      // Post the takeover confirmation embed into the ticket channel
+      if (wasAiHandling) {
+        const transferBtn = new ButtonBuilder()
+          .setCustomId('ticket_transfer')
+          .setLabel('Transfer Ticket')
+          .setEmoji('🔄')
+          .setStyle(ButtonStyle.Secondary);
+
+        const continueAiBtn = new ButtonBuilder()
+          .setCustomId('ticket_continue_ai')
+          .setLabel('Continue with AI')
+          .setEmoji(embedBuilder.parseEmoji(embedBuilder.EMOJIS.continueAi))
+          .setStyle(ButtonStyle.Secondary);
+
+        const closeBtn = new ButtonBuilder()
+          .setCustomId('ticket_close_request')
+          .setLabel('Close Ticket')
+          .setEmoji(embedBuilder.parseEmoji(embedBuilder.EMOJIS.closeTicket))
+          .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(transferBtn, continueAiBtn, closeBtn);
+
+        const claimEmbed = embedBuilder.createSuccessEmbed(
+          'Ticket Handled by Staff',
+          `🙋‍♂️ <@${message.author.id}> has taken over this ticket and is providing direct assistance.\n\n` +
+          `• Automated AI responses are now paused.\n` +
+          `• Use the controls below to transfer, resume AI, or close the ticket.`
+        );
+
+        await message.channel.send({ embeds: [claimEmbed], components: [row] }).catch(() => {});
+      }
       return;
     }
 
