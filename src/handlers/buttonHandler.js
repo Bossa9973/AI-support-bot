@@ -296,7 +296,7 @@ module.exports = {
 
       const aiResumeEmbed = embedBuilder.createInfoEmbed(
         '🤖 AI Fast-Response Resumed',
-        'The AI Support Assistant will continue answering questions in this ticket until a staff member arrives to assist.'
+        'Eon will continue answering questions in this ticket until a staff member arrives to assist.'
       );
 
       return interaction.reply({

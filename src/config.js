@@ -108,7 +108,7 @@ module.exports = {
     categoryId: process.env.TICKET_CATEGORY_ID || null,
     supportRoleId: process.env.SUPPORT_ROLE_ID || null,
     transcriptChannelId: process.env.TRANSCRIPT_CHANNEL_ID || null,
-    greetingMessage: process.env.TICKET_GREETING_MESSAGE || "Hello {user}, thank you for reaching out! 👋\nPlease describe your issue or question in detail, and our AI support assistant will be right with you.",
+    greetingMessage: process.env.TICKET_GREETING_MESSAGE || "Hello {user}, thank you for reaching out! 👋\nDescribe your issue or question and **Eon**, our AI support agent, will be right with you.",
     embedColor: process.env.EMBED_COLOR || '#5865F2',
     channelPrefix: 'ticket-',
     maxTicketsPerUser: 1

@@ -197,7 +197,7 @@ module.exports = {
   createTicketGreeting(ticketUser, ticketNumber, categoryId = 'general_support') {
     const formattedNumber = String(ticketNumber).padStart(4, '0');
     const categoryData = getCategoryData(categoryId);
-    const rawGreeting = config.tickets.greetingMessage || "Hello {user}, thank you for reaching out! 👋\nPlease describe your issue or question in detail, and our AI support assistant will be right with you.";
+    const rawGreeting = config.tickets.greetingMessage || "Hello {user}, thank you for reaching out! 👋\nDescribe your issue or question and **Eon**, our AI support agent, will be right with you.";
     const formattedGreeting = rawGreeting.replace(/\{user\}/g, `<@${ticketUser.id}>`);
 
     const embed = new EmbedBuilder()
@@ -211,7 +211,7 @@ module.exports = {
       .addFields([
         { name: `${EMOJIS.user} Opened By`, value: `<@${ticketUser.id}>`, inline: true },
         { name: '🏷️ Category', value: `${categoryData.emoji} ${categoryData.label}`, inline: true },
-        { name: '🤖 AI Assistant', value: '`🟢 Active & Listening`', inline: true }
+        { name: '🤖 Eon', value: '`🟢 Active & Listening`', inline: true }
       ])
       .setFooter({ text: `Ticket #${formattedNumber} • Click Close when resolved` })
       .setTimestamp();
