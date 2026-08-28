@@ -270,6 +270,14 @@ module.exports = {
         return interaction.reply({ embeds: [errEmbed], ephemeral: true });
       }
 
+      if (!isStaffMember(member, interaction.guild, user)) {
+        const warnEmbed = embedBuilder.createWarningEmbed(
+          'Permission Denied',
+          'Only support team members or administrators can resume AI assistance.'
+        );
+        return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+      }
+
       db.updateTicket(channel.id, { continueWithAi: true, claimedBy: null, staffActive: false });
 
       const claimBtn = new ButtonBuilder()
@@ -299,7 +307,7 @@ module.exports = {
 
     // 11. Re-open Ticket
     if (customId === 'ticket_reopen') {
-      if (!isStaffMember(member)) {
+      if (!isStaffMember(member, interaction.guild, user)) {
         const warnEmbed = embedBuilder.createWarningEmbed(
           'Permission Denied',
           'Only staff members or administrators can re-open tickets.'
@@ -323,7 +331,7 @@ module.exports = {
 
     // 12. Delete Ticket
     if (customId === 'ticket_delete') {
-      if (!isStaffMember(member)) {
+      if (!isStaffMember(member, interaction.guild, user)) {
         const warnEmbed = embedBuilder.createWarningEmbed(
           'Permission Denied',
           'Only staff members or administrators can delete ticket channels.'
