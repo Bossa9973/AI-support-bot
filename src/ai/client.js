@@ -69,8 +69,8 @@ async function createChatCompletion(params, options = {}) {
           continue;
         }
 
-        // If credits are 0 or cannot afford on paid model, switch to ultra-efficient llama-3.1-8b-instruct
-        const fallbackModel = config.ai.fallbackModel || 'meta-llama/llama-3.1-8b-instruct';
+        // If credits are 0 or cannot afford on paid model, switch to free fallback model
+        const fallbackModel = config.ai.fallbackModel || 'poolside/laguna-s-2.1:free';
         if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
           console.warn(`[${context}] ⚠️ OpenRouter paid model credit low. Automatically falling back to efficient model (${fallbackModel}) with max_tokens: 300...`);
           requestParams.model = fallbackModel;
@@ -79,7 +79,21 @@ async function createChatCompletion(params, options = {}) {
         }
       }
 
-      // ─── 2. HANDLE 404 MODEL UNAVAILABLE / REDIRECT SLUG ─────────────────────
+      // ─── 2. HANDLE 410 MODEL END-OF-LIFE (EOL / Gone) ────────────────────────
+      if (status === 410 || errMsg.includes('410') || errMsg.includes('end of life') || errMsg.includes('no longer available')) {
+        const eolFallback = config.ai.fallbackModel ||
+          (config.ai.provider === 'nvidia' ? 'nvidia/nemotron-3.5-lightning-30b-a3b' : 'poolside/laguna-s-2.1:free');
+        if (requestParams.model !== eolFallback) {
+          console.warn(`[${context}] ⚠️ Model '${requestParams.model}' has reached end of life (410). Switching to fallback: ${eolFallback}`);
+          requestParams.model = eolFallback;
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 400, 400);
+          continue;
+        }
+        // Fallback itself is also EOL — throw so the caller surfaces a proper error
+        throw err;
+      }
+
+      // ─── 3. HANDLE 404 MODEL UNAVAILABLE / REDIRECT SLUG ─────────────────────
       if (status === 404 || errMsg.includes('404') || errMsg.includes('unavailable') || errMsg.includes('No endpoints found')) {
         const slugMatch = errMsg.match(/use this slug instead:\s*([a-zA-Z0-9_\-\.\/:]+)/i);
         if (slugMatch) {
@@ -99,10 +113,11 @@ async function createChatCompletion(params, options = {}) {
           continue;
         }
 
-        // Fallback to primary configured model or ultra-cheap llama-3.1-8b-instruct
-        if (requestParams.model !== 'meta-llama/llama-3.1-8b-instruct') {
-          console.warn(`[${context}] ⚠️ Model unavailable (404). Falling back to meta-llama/llama-3.1-8b-instruct...`);
-          requestParams.model = 'meta-llama/llama-3.1-8b-instruct';
+        // Fallback to configured fallback model
+        const notFoundFallback = config.ai.fallbackModel || 'poolside/laguna-s-2.1:free';
+        if (requestParams.model !== notFoundFallback) {
+          console.warn(`[${context}] ⚠️ Model unavailable (404). Falling back to ${notFoundFallback}...`);
+          requestParams.model = notFoundFallback;
           requestParams.max_tokens = Math.min(requestParams.max_tokens || 350, 350);
           continue;
         }

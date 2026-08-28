@@ -145,14 +145,17 @@ module.exports = {
       const messages = await channel.messages.fetch({ limit: 100 }).catch(() => new Map());
 
       // 3. Post closed controls in channel
-      const closedControls = embedBuilder.createClosedControls(closedByUser.id);
+      const closedUserId = closedByUser?.id || (typeof closedByUser === 'string' ? closedByUser : channel.client.user.id);
+      const closedUserObj = (closedByUser && closedByUser.id) ? closedByUser : channel.client.user;
+
+      const closedControls = embedBuilder.createClosedControls(closedUserId);
       await channel.send(closedControls).catch((err) => console.error('Error sending closedControls:', err));
 
       // 4. Send transcript to Logs channel if configured
       if (transcriptAttachment && config.tickets.transcriptChannelId) {
         const logChannel = channel.guild.channels.cache.get(config.tickets.transcriptChannelId);
         if (logChannel && logChannel.isTextBased()) {
-          const logEmbed = embedBuilder.createTranscriptLogEmbed(ticketData, closedByUser, messages.size);
+          const logEmbed = embedBuilder.createTranscriptLogEmbed(ticketData, closedUserObj, messages.size);
           await logChannel.send({
             embeds: [logEmbed],
             files: [transcriptAttachment]
@@ -167,7 +170,7 @@ module.exports = {
           const userDmEmbed = embedBuilder.createTranscriptUserDMEmbed(
             ticketData,
             channel.guild,
-            closedByUser,
+            closedUserObj,
             messages.size
           );
           await ticketUser.send({

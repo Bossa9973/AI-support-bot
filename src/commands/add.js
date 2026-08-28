@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const db = require('../database/db');
 const embedBuilder = require('../utils/embedBuilder');
 
@@ -20,7 +20,7 @@ module.exports = {
         'Invalid Ticket Channel',
         'This command can only be used inside an active ticket channel.'
       );
-      return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 
     const targetUser = interaction.options.getUser('user');

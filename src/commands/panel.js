@@ -1,6 +1,7 @@
 const {
   SlashCommandBuilder,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  MessageFlags
 } = require('discord.js');
 const embedBuilder = require('../utils/embedBuilder');
 
@@ -19,6 +20,6 @@ module.exports = {
       'The interactive support ticket panel has been posted to this channel.'
     );
 
-    await interaction.reply({ embeds: [successEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
   }
 };

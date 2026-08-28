@@ -12,6 +12,7 @@ const embedBuilder = require('../utils/embedBuilder');
 const ticketManager = require('../utils/ticketManager');
 const aiQueue = require('../utils/aiQueue');
 const resolutionManager = require('../utils/resolutionManager');
+const { isStaffMember } = require('../utils/staffChecker');
 
 /**
  * Splits long message content into Discord-safe chunks (max 2000 chars each).
@@ -39,20 +40,32 @@ function splitMessage(str, maxLen = 1950) {
 }
 
 /**
- * Checks if a guild member is staff/admin.
+ * Robust check for user or staff close intent.
  */
-function isStaffMember(member) {
-  if (!member) return false;
-  if (config.tickets.supportRoleId && member.roles.cache.has(config.tickets.supportRoleId)) {
-    return true;
-  }
-  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
-  if (member.guild && member.guild.ownerId === member.id) return true;
-  if (config.ownerId === member.id || (config.ownerIds && config.ownerIds.includes(member.id))) {
-    return true;
-  }
-  return false;
+function isCloseIntent(text) {
+  if (!text) return false;
+  const clean = text.trim().toLowerCase().replace(/[.!?]/g, '');
+
+  const exactPhrases = [
+    'close', 'close ticket', 'close this ticket', 'close the ticket',
+    'close it', 'close please', 'please close', 'please close ticket',
+    'please close the ticket', 'please close this ticket', 'close it please',
+    'close now', 'close ticket now', 'you can close', 'you can close it',
+    'you can close the ticket', 'you can close this ticket', 'you can close now',
+    'feel free to close', 'feel free to close the ticket', 'feel free to close it',
+    'go ahead and close', 'go ahead and close the ticket', 'go ahead and close it',
+    'can you close', 'can you close the ticket', 'can you close it',
+    'i want to close the ticket', 'i want to close', 'i want to close it',
+    'done close', 'done close it', 'resolved close', 'resolved close it',
+    'fixed close', 'fixed close it', 'all good close it', 'all good close ticket',
+    'all good close', 'no more questions close', 'no further questions close',
+    'lock ticket', 'lock channel', 'archive ticket'
+  ];
+  if (exactPhrases.includes(clean)) return true;
+
+  // Regex patterns (e.g. "please close the ticket now", "you can close this", "close ticket thanks")
+  const closeRegex = /^(?:please\s+)?(?:you\s+can\s+|feel\s+free\s+to\s+|go\s+ahead\s+and\s+|can\s+you\s+)?(?:close|resolve|archive|shut\s+down)(?:\s+(?:the|this|my|it))?(?:\s+ticket)?(?:\s+(?:now|please|pls|thanks|thank\s+you))?$/i;
+  return closeRegex.test(clean);
 }
 
 module.exports = {
@@ -71,13 +84,37 @@ module.exports = {
     const isTicketCreator = ticket.userId === message.author.id;
     const isStaff = isStaffMember(message.member);
 
-    // 3. If ticket is explicitly claimed by staff with AI paused, staff's own messages don't trigger AI replies
-    if (ticket.claimedBy && ticket.continueWithAi === false && message.author.id === ticket.claimedBy) {
+    // 3. Handle Staff Members speaking in tickets
+    if (isStaff && !isTicketCreator) {
+      // If staff member gives close command:
+      if (isCloseIntent(message.content)) {
+        resolutionManager.clearTimers(message.channel.id);
+        await message.channel.send('🔒 Staff initiated ticket closure. Archiving channel...');
+        await ticketManager.closeTicket(message.channel, message.author, 'Closed by staff request');
+        return;
+      }
+
+      // If ticket is claimed by staff with AI paused, or staff is actively assisting:
+      // Mark staff active and do NOT let AI answer staff messages
+      db.updateTicket(message.channel.id, { staffActive: true });
+      if (ticket.continueWithAi === false) {
+        return;
+      }
+      // Even if continueWithAi is true, AI should not answer when staff is speaking directly
       return;
     }
 
     // Clear any pending inactivity auto-close timer since the user is actively messaging
     resolutionManager.clearTimers(message.channel.id);
+
+    // 4. Check if User/Customer sent an explicit close request
+    const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');
+    if (isCloseIntent(trimmedQuery)) {
+      resolutionManager.clearTimers(message.channel.id);
+      await message.channel.send('🔒 Closing ticket now. Thank you for contacting support!');
+      await ticketManager.closeTicket(message.channel, message.author, 'Closed by user request');
+      return;
+    }
 
     let typingInterval = null;
     try {
@@ -104,7 +141,7 @@ module.exports = {
 
       // Pre-fetch history immediately (runs in parallel while waiting for queue slot)
       const historyPromise = message.channel && message.channel.messages
-        ? message.channel.messages.fetch({ limit: 12 }).then((fetchedMessages) => {
+        ? message.channel.messages.fetch({ limit: 35 }).then((fetchedMessages) => {
             const history = [];
             const sorted = Array.from(fetchedMessages.values()).sort(
               (a, b) => a.createdTimestamp - b.createdTimestamp
@@ -112,7 +149,6 @@ module.exports = {
             for (const msg of sorted) {
               if (msg.id === message.id) continue;
               const isBot = msg.author.id === message.client.user.id;
-              const role = isBot ? 'assistant' : 'user';
 
               let text = msg.content || '';
               if (msg.embeds && msg.embeds.length > 0) {
@@ -129,7 +165,15 @@ module.exports = {
                 }
               }
               if (!text.trim()) continue;
-              history.push({ role, content: `${msg.author.username}: ${text.trim()}` });
+
+              if (isBot) {
+                // NEVER prefix bot's own assistant message with bot name
+                history.push({ role: 'assistant', content: text.trim() });
+              } else {
+                const msgAuthorStaff = isStaffMember(msg.member);
+                const prefix = msgAuthorStaff ? `[Staff @${msg.author.username}]` : `@${msg.author.username}`;
+                history.push({ role: 'user', content: `${prefix}: ${text.trim()}` });
+              }
             }
             return history;
           }).catch(() => [])
@@ -140,105 +184,104 @@ module.exports = {
         // 6a. Await pre-fetched history (likely already done by now)
         const history = await historyPromise;
 
-          // 6b. Parse attachments from the current message
-          const imageUrls = [];
-          let inlineText = '';
-          for (const [, attachment] of message.attachments) {
-            const ct = (attachment.contentType || '').toLowerCase();
-            const name = (attachment.name || '').toLowerCase();
-            if (ct.startsWith('image/')) {
-              imageUrls.push(attachment.url);
-            } else if (
-              ct.startsWith('text/') ||
-              name.endsWith('.txt') || name.endsWith('.log') ||
-              name.endsWith('.json') || name.endsWith('.yaml') ||
-              name.endsWith('.yml') || name.endsWith('.conf') ||
-              name.endsWith('.sh') || name.endsWith('.py') ||
-              name.endsWith('.js') || name.endsWith('.md')
-            ) {
-              try {
-                const res = await fetch(attachment.url);
-                const text = await res.text();
-                const trimmed = text.slice(0, 4000);
-                inlineText += `\n\n[Attached file: ${attachment.name}]\n\`\`\`\n${trimmed}${text.length > 4000 ? '\n... (truncated)' : ''}\n\`\`\``;
-              } catch (fetchErr) {
-                console.error('Failed to fetch text attachment:', fetchErr.message);
-              }
+        // 6b. Parse attachments from the current message
+        const imageUrls = [];
+        let inlineText = '';
+        for (const [, attachment] of message.attachments) {
+          const ct = (attachment.contentType || '').toLowerCase();
+          const name = (attachment.name || '').toLowerCase();
+          if (ct.startsWith('image/')) {
+            imageUrls.push(attachment.url);
+          } else if (
+            ct.startsWith('text/') ||
+            name.endsWith('.txt') || name.endsWith('.log') ||
+            name.endsWith('.json') || name.endsWith('.yaml') ||
+            name.endsWith('.yml') || name.endsWith('.conf') ||
+            name.endsWith('.sh') || name.endsWith('.py') ||
+            name.endsWith('.js') || name.endsWith('.md')
+          ) {
+            try {
+              const res = await fetch(attachment.url);
+              const text = await res.text();
+              const trimmed = text.slice(0, 4000);
+              inlineText += `\n\n[Attached file: ${attachment.name}]\n\`\`\`\n${trimmed}${text.length > 4000 ? '\n... (truncated)' : ''}\n\`\`\``;
+            } catch (fetchErr) {
+              console.error('Failed to fetch text attachment:', fetchErr.message);
             }
           }
+        }
 
-          const fullUserQuery = (message.content || '') + inlineText;
+        const fullUserQuery = (message.content || '') + inlineText;
 
-          // 6c. Build ticket state
-          const ticketCategory = ticket.category || 'general_support';
-          const ticketCategoryData = embedBuilder.getCategoryData(ticketCategory);
+        // 6c. Build ticket state
+        const ticketCategory = ticket.category || 'general_support';
+        const ticketCategoryData = embedBuilder.getCategoryData(ticketCategory);
 
-          const ticketState = {
-            escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
-            priority: ticket.priority || 'green',
-            lastSummary: ticket.lastSummary || '',
-            category: ticketCategory,
-            categoryLabel: ticketCategoryData.label,
-            categoryDescription: ticketCategoryData.description
-          };
+        const ticketState = {
+          escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
+          priority: ticket.priority || 'green',
+          lastSummary: ticket.lastSummary || '',
+          category: ticketCategory,
+          categoryLabel: ticketCategoryData.label,
+          categoryDescription: ticketCategoryData.description
+        };
 
-          const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');
-          const isExplicitCloseRequest =
-            trimmedQuery === 'close the ticket' ||
-            trimmedQuery === 'close ticket' ||
-            trimmedQuery === 'close please' ||
-            trimmedQuery === 'close this ticket' ||
-            trimmedQuery === 'please close the ticket' ||
-            trimmedQuery === 'close it';
+        // Check if last bot message asked about closing and user affirmed with yea/yes/sure/thanks
+        const lastBotMsg = [...history].reverse().find(m => m.role === 'assistant');
+        const botAskedToClose = lastBotMsg && (
+          lastBotMsg.content.toLowerCase().includes('close') ||
+          lastBotMsg.content.toLowerCase().includes('solve your issue') ||
+          lastBotMsg.content.toLowerCase().includes('anything else') ||
+          lastBotMsg.content.toLowerCase().includes('is that okay')
+        );
+        const isAffirmativeClose = botAskedToClose && (
+          trimmedQuery === 'yea' ||
+          trimmedQuery === 'yeah' ||
+          trimmedQuery === 'yes' ||
+          trimmedQuery === 'yep' ||
+          trimmedQuery === 'sure' ||
+          trimmedQuery === 'ok' ||
+          trimmedQuery === 'okay' ||
+          trimmedQuery === 'all good' ||
+          trimmedQuery === 'thanks' ||
+          trimmedQuery === 'thank you' ||
+          trimmedQuery === 'that worked' ||
+          trimmedQuery === 'it worked' ||
+          trimmedQuery === 'fixed' ||
+          trimmedQuery === 'no thanks' ||
+          trimmedQuery === 'nope' ||
+          trimmedQuery === 'no'
+        );
 
-          // Check if last bot message asked about closing and user affirmed with yea/yes/sure
-          const lastBotMsg = [...history].reverse().find(m => m.role === 'assistant');
-          const botAskedToClose = lastBotMsg && (
-            lastBotMsg.content.toLowerCase().includes('close the ticket') ||
-            lastBotMsg.content.toLowerCase().includes('close this ticket') ||
-            lastBotMsg.content.toLowerCase().includes('is that okay')
+        if (isAffirmativeClose) {
+          if (typingInterval) {
+            clearInterval(typingInterval);
+            typingInterval = null;
+          }
+          resolutionManager.clearTimers(message.channel.id);
+          await message.channel.send('Closing this ticket now. Let us know if you need anything else later!');
+          await ticketManager.closeTicket(message.channel, message.author, 'Closed by user confirmation');
+          return;
+        }
+
+        // 6d. Generate AI response
+        let streamBuffer = '';
+        let aiResult;
+        try {
+          aiResult = await generateSupportResponseStream(
+            history,
+            fullUserQuery,
+            message.author.username,
+            ticketState,
+            imageUrls,
+            (token) => { streamBuffer += token; }
           );
-          const isAffirmativeClose = botAskedToClose && (
-            trimmedQuery === 'yea' ||
-            trimmedQuery === 'yeah' ||
-            trimmedQuery === 'yes' ||
-            trimmedQuery === 'yep' ||
-            trimmedQuery === 'sure' ||
-            trimmedQuery === 'ok' ||
-            trimmedQuery === 'okay'
-          );
-
-          if (isExplicitCloseRequest || isAffirmativeClose) {
-            if (typingInterval) {
-              clearInterval(typingInterval);
-              typingInterval = null;
-            }
-            resolutionManager.clearTimers(message.channel.id);
-            await message.channel.send({
-              content: 'Closing this ticket now. Let us know if you need anything else later.'
-            });
-            await ticketManager.closeTicket(message.channel, message.author, 'Closed by user request');
-            return;
+        } finally {
+          if (typingInterval) {
+            clearInterval(typingInterval);
+            typingInterval = null;
           }
-
-          // 6d. Generate AI response
-          let streamBuffer = '';
-          let aiResult;
-          try {
-            aiResult = await generateSupportResponseStream(
-              history,
-              fullUserQuery,
-              message.author.username,
-              ticketState,
-              imageUrls,
-              (token) => { streamBuffer += token; }
-            );
-          } finally {
-            if (typingInterval) {
-              clearInterval(typingInterval);
-              typingInterval = null;
-            }
-          }
+        }
 
         // 6e. Send the complete reply if not empty
         if (aiResult.reply && aiResult.reply.trim()) {
@@ -253,7 +296,7 @@ module.exports = {
           }
         } else if (aiResult.closeTicket) {
           await message.channel.send({
-            content: 'Closing this ticket now. Let us know if you need anything else later.'
+            content: 'Closing this ticket now. Let us know if you need anything else later!'
           }).catch(console.error);
         }
 
@@ -270,7 +313,7 @@ module.exports = {
           await resolutionManager.startResolutionFlow(message.channel, ticket.userId || message.author.id);
         }
 
-        // 6g. If AI detected a knowledge gap, proactively ask the Owner via DM for clarification
+        // 6h. If AI detected a knowledge gap, proactively ask the Owner via DM for clarification
         if (aiResult.knowledgeGap && !ticketState.escalated) {
           sendKnowledgeQuestionToOwner(message.client, {
             ticketNumber: ticket.ticketNumber,
@@ -282,12 +325,12 @@ module.exports = {
           }).catch((err) => console.error('[MessageHandler] sendKnowledgeQuestionToOwner error:', err.message));
         }
 
-        // 6h. Fire general self-learning in the background (non-blocking)
+        // 6i. Fire general self-learning in the background (non-blocking)
         if (!ticketState.escalated) {
           checkAndLearn(message.client, fullUserQuery, aiResult.reply, history).catch(() => {});
         }
 
-        // 6i. Staff handoff only when strictly necessary (verified emergency, explicit user request, admin backend task)
+        // 6j. Staff handoff only when strictly necessary (verified emergency, explicit user request, admin backend task)
         if (aiResult.handoff) {
           const priority = aiResult.priority || 'green';
           const slug = aiResult.slug || 'support-issue';
@@ -319,7 +362,7 @@ module.exports = {
           ).catch(() => {});
         }
 
-        // 6i. Re-ping staff if holding mode AI detected an update
+        // 6k. Re-ping staff if holding mode AI detected an update
         if (aiResult.repingStaff) {
           const repingPriority = aiResult.priority || ticket.priority || 'green';
           const repingEmbed = embedBuilder.createStaffHandoffEmbed(

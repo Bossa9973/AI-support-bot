@@ -12,22 +12,7 @@ const config = require('../config');
 const knowledgeManager = require('../ai/knowledgeManager');
 const resolutionManager = require('../utils/resolutionManager');
 
-/**
- * Helper to check staff permissions
- */
-function isStaffMember(member) {
-  if (!member) return false;
-  if (config.tickets.supportRoleId && member.roles.cache.has(config.tickets.supportRoleId)) {
-    return true;
-  }
-  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  if (member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
-  if (member.guild && member.guild.ownerId === member.id) return true;
-  if (config.ownerId === member.id || (config.ownerIds && config.ownerIds.includes(member.id))) {
-    return true;
-  }
-  return false;
-}
+const { isStaffMember } = require('../utils/staffChecker');
 
 module.exports = {
   /**

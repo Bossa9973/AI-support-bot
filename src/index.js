@@ -5,7 +5,8 @@ const {
   Collection,
   REST,
   Routes,
-  ChannelType
+  ChannelType,
+  MessageFlags
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -81,7 +82,7 @@ async function registerCommands() {
 }
 
 // Bot Ready Event
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log('====================================================');
   console.log(`🤖 AI Support Bot is ONLINE as ${client.user.tag}`);
   console.log(`👑 Owner ID configured: ${config.ownerId ? config.ownerId : 'None (Set OWNER_ID in .env)'}`);
@@ -118,7 +119,7 @@ client.on('interactionCreate', async (interaction) => {
     console.error('Error handling interaction:', error);
     const replyContent = {
       content: '❌ There was an error while executing this action!',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     };
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(replyContent).catch(() => {});

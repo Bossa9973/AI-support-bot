@@ -348,6 +348,12 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
     .replace(/SUMMARY:\s*[^\n]+/gi, '')
     .trim();
 
+  // 6. Strip any artificial role prefix like "Vertex Deployments:", "Vertex Deployer:", "Assistant:", "AI:", etc.
+  reply = reply
+    .replace(/^(?:vertex\s+deployments?|vertex\s+deployer|assistant|support\s+assistant|bot|ai)\s*:\s*/i, '')
+    .replace(/^["']?(?:vertex\s+deployments?|vertex\s+deployer|assistant|support\s+assistant|bot|ai)\s*:\s*/i, '')
+    .trim();
+
   return {
     reply: reply.trim(),
     handoff,
@@ -386,9 +392,14 @@ async function generateSupportResponse(conversationHistory, userQuery, username 
     categoryDescription = 'Assistance with server management and dashboard'
   } = ticketState;
 
+  const combinedContextText = [
+    ...(Array.isArray(conversationHistory) ? conversationHistory.slice(-6).map(m => m.content) : []),
+    userQuery
+  ].join(' ');
+
   const knowledgeBaseText = escalated
     ? getKnowledgeContext()
-    : getFocusedKnowledgeContext(userQuery, 5, category);
+    : getFocusedKnowledgeContext(combinedContextText, 5, category);
 
   // ─── POST-ESCALATION / HOLDING MODE ──────────────────────────────────────────
   if (escalated) {
@@ -418,7 +429,7 @@ User: @${username}`;
 
     const messages = [{ role: 'system', content: holdingSystemPrompt }];
     if (Array.isArray(conversationHistory)) {
-      for (const msg of conversationHistory.slice(-4)) {
+      for (const msg of conversationHistory.slice(-24)) {
         messages.push({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: msg.content
@@ -480,7 +491,7 @@ User: @${username}`;
   const messages = [{ role: 'system', content: systemPrompt }];
 
   if (Array.isArray(conversationHistory)) {
-    for (const msg of conversationHistory.slice(-4)) {
+    for (const msg of conversationHistory.slice(-24)) {
       messages.push({
         role: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content

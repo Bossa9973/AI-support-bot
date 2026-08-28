@@ -18,31 +18,31 @@ const WARNING_COLOR = '#FEE75C';
 const DANGER_COLOR = '#ED4245';
 const DARK_PANEL_COLOR = '#2B2D31';
 
-// Custom System Emojis
+// Custom System Emojis (Universal Unicode emojis that work reliably across all servers)
 const EMOJIS = {
   // Category Emojis
-  cart: '<:cart:1541899176135237773>',
-  account: '<:emoji2:1541900863310794863>',
-  bug: '<:bug:1541903664707272804>',
-  technical: '<:Code:1541900534662045717>',
-  support: '<:support:1541899692567302296>',
-  info: '<:info:1541899910373187614>',
-  gift: '<:Gift:1541901863849431050>',
+  cart: '🛒',
+  account: '👤',
+  bug: '🐛',
+  technical: '💻',
+  support: '🛠️',
+  info: 'ℹ️',
+  gift: '🎁',
 
   // Priority Time Badges
-  emergency: '<:replace_time4:1541902633982238899>', // Critical / Emergency (Red)
-  moderate: '<:replace_time3:1541902584955150469>',  // Moderate / High (Orange)
-  mid: '<:replace_time2:1541902531259531334>',       // Mid / Elevated (Yellow)
-  standard: '<:replace_time1:1541902476779855955>',  // Low / Standard (Green)
+  emergency: '🔴', // Critical / Emergency (Red)
+  moderate: '🟠',  // Moderate / High (Orange)
+  mid: '🟡',       // Mid / Elevated (Yellow)
+  standard: '🟢',  // Low / Standard (Green)
 
   // Bot & Ticket UI Icons
-  ticket: '<:ticket:1541904611584114689>',
-  user: '<:user:1541904678768480307>',
-  deleteTicket: '<:emoji22:1541903146807332906>',
-  reopenTicket: '<:ticket_open:1541905670536962078>',
-  closeTicket: '<:ticket_close:1541905770214334627>',
-  claimTicket: '<:emoji43:1541903349429968936>',
-  continueAi: '<:emoji31:1541903062514274316>',
+  ticket: '🎫',
+  user: '👤',
+  deleteTicket: '⛔',
+  reopenTicket: '🔓',
+  closeTicket: '🔒',
+  claimTicket: '🙋‍♂️',
+  continueAi: '🤖',
   transcript: '📑'
 };
 

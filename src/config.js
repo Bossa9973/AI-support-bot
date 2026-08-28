@@ -49,7 +49,7 @@ if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
 }
 
 const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '350', 10);
-const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter' ? 'meta-llama/llama-3.1-8b-instruct' : 'meta/llama-3.3-70b-instruct');
+const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter' ? 'poolside/laguna-s-2.1:free' : 'nvidia/nemotron-3.5-lightning-30b-a3b');
 
 const activeAIConfig = selectedProvider === 'nvidia'
   ? {
