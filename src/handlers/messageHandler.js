@@ -82,7 +82,7 @@ module.exports = {
     if (!ticket || ticket.status === 'closed') return;
 
     const isTicketCreator = ticket.userId === message.author.id;
-    const isStaff = isStaffMember(message.member);
+    const isStaff = isStaffMember(message.member, message.guild, message.author);
 
     // 3. Handle Staff Members speaking in tickets
     if (isStaff && !isTicketCreator) {
@@ -94,13 +94,12 @@ module.exports = {
         return;
       }
 
-      // If ticket is claimed by staff with AI paused, or staff is actively assisting:
-      // Mark staff active and do NOT let AI answer staff messages
-      db.updateTicket(message.channel.id, { staffActive: true });
-      if (ticket.continueWithAi === false) {
-        return;
-      }
-      // Even if continueWithAi is true, AI should not answer when staff is speaking directly
+      // Automatic handover: when staff speaks in a ticket, pause AI and assign staff control
+      db.updateTicket(message.channel.id, {
+        staffActive: true,
+        continueWithAi: false,
+        claimedBy: ticket.claimedBy || message.author.id
+      });
       return;
     }
 
@@ -113,6 +112,12 @@ module.exports = {
       resolutionManager.clearTimers(message.channel.id);
       await message.channel.send('🔒 Closing ticket now. Thank you for contacting support!');
       await ticketManager.closeTicket(message.channel, message.author, 'Closed by user request');
+      return;
+    }
+
+    // 5. If ticket is currently being handled by human staff (claimed or staff active with AI paused),
+    // do NOT generate automated AI responses — let the user and staff talk directly!
+    if (ticket.continueWithAi === false || ticket.staffActive || ticket.claimedBy) {
       return;
     }
 

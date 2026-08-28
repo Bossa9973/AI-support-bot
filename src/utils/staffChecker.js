@@ -7,18 +7,20 @@ const config = require('../config');
  * @param {import('discord.js').GuildMember} member 
  * @returns {boolean}
  */
-function isStaffMember(member) {
-  if (!member) return false;
+function isStaffMember(member, guild = null, author = null) {
+  const memberId = member?.id || member?.user?.id || author?.id;
+  const currentGuild = guild || member?.guild;
 
   // 1. Direct Owner IDs check
-  const memberId = member.id || member.user?.id;
   if (memberId) {
     if (config.ownerId && config.ownerId === memberId) return true;
     if (Array.isArray(config.ownerIds) && config.ownerIds.includes(memberId)) return true;
   }
 
   // 2. Guild Owner check
-  if (member.guild && member.guild.ownerId === memberId) return true;
+  if (currentGuild && memberId && currentGuild.ownerId === memberId) return true;
+
+  if (!member) return false;
 
   // 3. Configured Support Role ID check
   if (config.tickets && config.tickets.supportRoleId) {
@@ -34,11 +36,11 @@ function isStaffMember(member) {
     if (member.permissions.has(PermissionFlagsBits.ManageChannels)) return true;
   }
 
-  // 5. Role Name pattern fallback (Staff, Support, Admin, Mod, Team)
+  // 5. Role Name pattern fallback (Staff, Support, Admin, Mod, Team, Owner, Dev, Helper, Management)
   if (member.roles && member.roles.cache) {
     const isStaffRole = member.roles.cache.some(r =>
-      /^(staff|support|administrator|admin|moderator|mod|team|management)$/i.test(r.name) ||
-      /\b(staff|support|admin|moderator)\b/i.test(r.name)
+      /^(staff|support|administrator|admin|moderator|mod|team|management|owner|founder|dev|developer|helper)$/i.test(r.name) ||
+      /\b(staff|support|admin|moderator|management|team|founder)\b/i.test(r.name)
     );
     if (isStaffRole) return true;
   }
