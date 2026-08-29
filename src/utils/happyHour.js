@@ -284,24 +284,38 @@ function parseTimeInput(inputStr) {
   return null;
 }
 
+// ─── Happy Hour Custom Emojis ──────────────────────────────────────────────────
+const HH_EMOJIS = {
+  vpsServer:   '<:vpsserver:1541311081903820900>',
+  cpu:         '<:cpu_bot_3d:1541311256533663814>',
+  ram:         '<:ram:1541311328512249866>',
+  storage:     '<:Disk:1356531848523546624>',
+  linux:       '<:linux:1541318028493586513>',
+  proxmox:     '<:proxmoxlogo:1402913376253775883>',
+  onlineBadge: '<:online_badge:1186069199219609601>',
+  inviteLink:  '<a:invitelink:1541312493572456480>',
+  rotiBoost:   '<a:roti_boost:1541311874690195488>',
+  nitroBoost:  '<:NitroBoost:1541091715333754943>'
+};
+
 // ─── Embed builder ────────────────────────────────────────────────────────────
 
 const TIER_META = {
-  regular:   { color: 0xFFD700, label: '⚡ HAPPY HOUR',             badge: '' },
-  booster:   { color: 0xFF73FA, label: '<:roti_boost:1> BOOSTER EXCLUSIVE HAPPY HOUR', badge: '🔒 **Boosters Only**\n' },
-  legendary: { color: 0xFF4500, label: '👑 ☄️ LEGENDARY DROP',      badge: '⚠️ **FIRST COME, FIRST SERVED — 1 SLOT ONLY**\n' }
+  regular:   { color: 0xFFD700, label: '⚡ HAPPY HOUR',                                            badge: '' },
+  booster:   { color: 0xFF73FA, label: `${HH_EMOJIS.rotiBoost} BOOSTER EXCLUSIVE HAPPY HOUR`,      badge: '🔒 **Boosters Only**\n' },
+  legendary: { color: 0xFF4500, label: '👑 ☄️ LEGENDARY DROP',                                     badge: '⚠️ **FIRST COME, FIRST SERVED — 1 SLOT ONLY**\n' }
 };
 
 function buildRequirementLine(event) {
   const { reqType, discountedInvites, discountedBolts, plan } = event;
   if (reqType === 'invites') {
-    return `<:invitelink:1> **${discountedInvites} invites** *(normally ${plan.invites})*`;
+    return `${HH_EMOJIS.inviteLink} **${discountedInvites} invites** *(normally ${plan.invites})*`;
   }
   if (reqType === 'bolts') {
     return `⚡ **${discountedBolts.toLocaleString()} BOLTs** *(normally ${plan.bolts.toLocaleString()})*`;
   }
   // invites_boost
-  return `<:invitelink:1> **${discountedInvites} invites** + <:roti_boost:1> **1 Server Boost** *(normally ${plan.invites} invites)*`;
+  return `${HH_EMOJIS.inviteLink} **${discountedInvites} invites** + ${HH_EMOJIS.rotiBoost} **1 Server Boost** *(normally ${plan.invites} invites)*`;
 }
 
 /**
@@ -318,12 +332,12 @@ function buildAnnounceEmbed(event, minutesLeft = null) {
 
   const desc = [
     meta.badge,
-    `<:vpsserver:1> **Plan:** ${plan.name}`,
-    `<:cpu_bot_3d:1> **CPU:** ${plan.cpu} Cores`,
-    `<:ram4:1> **RAM:** ${plan.ram} DDR4`,
-    `📀 **Storage:** ${plan.disk}`,
-    `<:linux2:1> Ubuntu / Debian  |  <:proxmoxlogo:1> Proxmox Support`,
-    `<:online_badge:1> **Uptime:** 24/7`,
+    `${HH_EMOJIS.vpsServer} **Plan:** ${plan.name}`,
+    `${HH_EMOJIS.cpu} **CPU:** ${plan.cpu} Cores`,
+    `${HH_EMOJIS.ram} **RAM:** ${plan.ram} DDR4`,
+    `${HH_EMOJIS.storage} **Storage:** ${plan.disk}`,
+    `${HH_EMOJIS.linux} Ubuntu / Debian  |  ${HH_EMOJIS.proxmox} Proxmox Support`,
+    `${HH_EMOJIS.onlineBadge} **Uptime:** 24/7`,
     ``,
     `━━━━━━━━━━━━━━━━━━━━━━`,
     `🏷️ **Discount: ${event.discount}% OFF**`,
@@ -573,7 +587,7 @@ async function handleClaim(interaction, eventId) {
     const isBoosting = member?.premiumSince || member?.premiumSinceTimestamp;
     if (!isBoosting) {
       return interaction.reply({
-        content: '<:roti_boost:1> This Happy Hour is **Booster Exclusive**. You need to be actively boosting this server to claim it!',
+        content: `${HH_EMOJIS.rotiBoost} This Happy Hour is **Booster Exclusive**. You need to be actively boosting this server to claim it!`,
         flags: MessageFlags.Ephemeral
       });
     }
@@ -623,7 +637,7 @@ async function handleClaim(interaction, eventId) {
   // Post the claim brief into the new ticket
   const reqLabel = event.reqType === 'bolts'
     ? `⚡ **${event.discountedBolts.toLocaleString()} BOLTs** *(${event.discount}% off ${event.plan.bolts.toLocaleString()})*`
-    : `<:invitelink:1> **${event.discountedInvites} invites** *(${event.discount}% off ${event.plan.invites})*${event.reqType === 'invites_boost' ? ' + <:roti_boost:1> **1 Server Boost**' : ''}`;
+    : `${HH_EMOJIS.inviteLink} **${event.discountedInvites} invites** *(${event.discount}% off ${event.plan.invites})*${event.reqType === 'invites_boost' ? ` + ${HH_EMOJIS.rotiBoost} **1 Server Boost**` : ''}`;
 
   const claimEmbed = new EmbedBuilder()
     .setColor(TIER_META[event.tier]?.color ?? 0xFFD700)
