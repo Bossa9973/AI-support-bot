@@ -18,7 +18,7 @@ const {
   ButtonBuilder,
   ButtonStyle
 } = require('discord.js');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const config = require('../config');
 const db = require('../database/db');
 
@@ -147,7 +147,7 @@ function buildHappyHourEvent() {
   const discountedBolts   = Math.round(plan.bolts  * mult);
 
   return {
-    id:         uuidv4(),
+    id:         randomUUID(),
     tier,                       // 'regular' | 'booster' | 'legendary'
     plan,                       // full plan object
     discount,                   // e.g. 25
