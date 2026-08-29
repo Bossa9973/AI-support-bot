@@ -13,6 +13,9 @@ const ticketManager = require('../utils/ticketManager');
 const aiQueue = require('../utils/aiQueue');
 const resolutionManager = require('../utils/resolutionManager');
 const { isStaffMember } = require('../utils/staffChecker');
+const panelApi = require('../utils/panelApi');
+const { formatPanelContext } = require('../utils/panelContextFormatter');
+const { processAiActions } = require('./panelActionHandler');
 
 /**
  * Splits long message content into Discord-safe chunks (max 2000 chars each).
@@ -192,13 +195,16 @@ module.exports = {
               const isBot = msg.author.id === message.client.user.id;
 
               let text = msg.content || '';
+              // Only parse user embeds or non-greeting staff embeds
               if (msg.embeds && msg.embeds.length > 0) {
                 const embLines = [];
                 for (const emb of msg.embeds) {
-                  if (emb.title) embLines.push(`[Embed Title: ${emb.title}]`);
-                  if (emb.description) embLines.push(`[Embed Description: ${emb.description}]`);
+                  // Skip greeting embed template from leaking into LLM prompt
+                  if (emb.title && emb.title.includes('Support Ticket • #')) continue;
+                  if (emb.title) embLines.push(`${emb.title}`);
+                  if (emb.description) embLines.push(`${emb.description}`);
                   if (emb.fields && emb.fields.length > 0) {
-                    for (const f of emb.fields) embLines.push(`[${f.name}: ${f.value}]`);
+                    for (const f of emb.fields) embLines.push(`${f.name}: ${f.value}`);
                   }
                 }
                 if (embLines.length > 0) {
@@ -211,7 +217,7 @@ module.exports = {
                 // NEVER prefix bot's own assistant message with bot name
                 history.push({ role: 'assistant', content: text.trim() });
               } else {
-                const msgAuthorStaff = isStaffMember(msg.member);
+                const msgAuthorStaff = isStaffMember(msg.member, msg.guild, msg.author);
                 const prefix = msgAuthorStaff ? `[Staff @${msg.author.username}]` : `@${msg.author.username}`;
                 history.push({ role: 'user', content: `${prefix}: ${text.trim()}` });
               }
@@ -258,13 +264,28 @@ module.exports = {
         const ticketCategory = ticket.category || 'general_support';
         const ticketCategoryData = embedBuilder.getCategoryData(ticketCategory);
 
+        // 6c-extra. Fetch (or use cached) panel context for this ticket
+        let panelContext = ticket.panelContext || null;
+        if (!panelContext && config.panel.enabled && ticket.userId) {
+          try {
+            const panelData = await panelApi.getPanelContext(ticket.userId);
+            panelContext = formatPanelContext(panelData, panelData === null);
+            // Cache on ticket so we don't re-fetch every message
+            db.updateTicket(message.channel.id, { panelContext });
+          } catch (panelErr) {
+            console.warn('[MessageHandler] Panel context fetch error:', panelErr.message);
+            panelContext = formatPanelContext(null, true); // offline notice
+          }
+        }
+
         const ticketState = {
           escalated: ticket.status === 'needs_staff' && ticket.continueWithAi === true,
           priority: ticket.priority || 'green',
           lastSummary: ticket.lastSummary || '',
           category: ticketCategory,
           categoryLabel: ticketCategoryData.label,
-          categoryDescription: ticketCategoryData.description
+          categoryDescription: ticketCategoryData.description,
+          panelContext: panelContext || null
         };
 
         // Check if last bot message asked about closing and user affirmed with yea/yes/sure/thanks
@@ -324,9 +345,21 @@ module.exports = {
           }
         }
 
-        // 6e. Send the complete reply if not empty
-        if (aiResult.reply && aiResult.reply.trim()) {
-          const finalChunks = splitMessage(aiResult.reply);
+        // 6e. Process [ACTION:] blocks from AI reply (strips them + posts confirm embeds)
+        let visibleReply = aiResult.reply;
+        if (config.panel.enabled && visibleReply) {
+          try {
+            const currentTicket = db.getTicket(message.channel.id) || ticket;
+            const panelData = currentTicket.panelContext ? null : null; // already formatted
+            visibleReply = await processAiActions(visibleReply, message.channel, currentTicket, null);
+          } catch (actionErr) {
+            console.warn('[MessageHandler] processAiActions error:', actionErr.message);
+          }
+        }
+
+        // 6f. Send the complete reply if not empty
+        if (visibleReply && visibleReply.trim()) {
+          const finalChunks = splitMessage(visibleReply);
           for (const chunk of finalChunks) {
             if (chunk && chunk.trim()) {
               await message.channel.send({
@@ -371,11 +404,11 @@ module.exports = {
           checkAndLearn(message.client, fullUserQuery, aiResult.reply, history).catch(() => {});
         }
 
-        // 6j. Staff handoff only when strictly necessary (verified emergency, explicit user request, admin backend task)
+        // 6j. Staff handoff only when strictly necessary (verified emergency, explicit user request, admin backend task, purchase order)
         if (aiResult.handoff) {
           const priority = aiResult.priority || 'green';
           const slug = aiResult.slug || 'support-issue';
-          await ticketManager.updateTicketNameAndPriority(message.channel, priority, slug);
+          await ticketManager.updateTicketNameAndPriority(message.channel, priority, slug, ticket.category);
           const handoffEmbed = embedBuilder.createStaffHandoffEmbed(
             aiResult.summary,
             priority,
@@ -383,20 +416,28 @@ module.exports = {
           );
 
           const roleTag = config.tickets.supportRoleId ? `<@&${config.tickets.supportRoleId}>` : '**Staff Team**';
-          const staffAlertText = priority === 'red'
-            ? `${roleTag} 🚨 **CRITICAL EMERGENCY ALERT**\n\n${aiResult.summary}`
-            : `${roleTag} Hey! This needs you 👋\n\n${aiResult.summary}`;
+          let staffAlertText = `${roleTag} Hey! This needs you 👋\n\n${aiResult.summary}`;
+          if (priority === 'purchase') {
+            staffAlertText = `${roleTag} 🛒 **NEW VPS PURCHASE ORDER**\n\n${aiResult.summary}`;
+          } else if (priority === 'red') {
+            staffAlertText = `${roleTag} 🚨 **CRITICAL EMERGENCY ALERT**\n\n${aiResult.summary}`;
+          }
 
-          await message.channel.send({ content: staffAlertText, ...handoffEmbed });
+          await message.channel.send({
+            content: staffAlertText,
+            ...handoffEmbed,
+            allowedMentions: { parse: ['roles', 'users'] }
+          });
 
           db.updateTicket(message.channel.id, {
             status: 'needs_staff',
             priority: priority,
             slug: slug,
-            lastSummary: aiResult.summary
+            lastSummary: aiResult.summary,
+            continueWithAi: false
           });
 
-          const priorityEmoji = priority === 'red' ? '🔴' : (priority === 'yellow' ? '🟡' : '🟢');
+          const priorityEmoji = priority === 'purchase' ? '🛒' : (priority === 'red' ? '🔴' : (priority === 'yellow' ? '🟡' : '🟢'));
           const formattedNum = String(ticket.ticketNumber || 1).padStart(4, '0');
           message.channel.setTopic(
             `${priorityEmoji} [${priority.toUpperCase()}] Ticket #${formattedNum} | ${aiResult.summary.slice(0, 100)}`
@@ -417,14 +458,19 @@ module.exports = {
             ? `${roleTag} 🚨 **SITUATION UPDATE — CRITICAL**\n\n${aiResult.summary}`
             : `${roleTag} 🔄 **Ticket Update:**\n\n${aiResult.summary}`;
 
-          await message.channel.send({ content: repingAlertText, ...repingEmbed });
+          await message.channel.send({
+            content: repingAlertText,
+            ...repingEmbed,
+            allowedMentions: { parse: ['roles', 'users'] }
+          });
 
           if (repingPriority !== ticket.priority) {
             db.updateTicket(message.channel.id, { priority: repingPriority });
             await ticketManager.updateTicketNameAndPriority(
               message.channel,
               repingPriority,
-              ticket.slug || 'support-issue'
+              ticket.slug || 'support-issue',
+              ticket.category
             );
           }
         }

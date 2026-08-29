@@ -8,9 +8,82 @@ const embedBuilder = require('./embedBuilder');
 const { generateTranscript } = require('./transcript');
 
 /**
+ * Ensures a category exists in the guild matching name/keywords with capacity (<50 channels).
+ * If not found, creates it with proper permission overwrites.
+ */
+async function ensureCategory(guild, targetCategoryName, searchKeywords = []) {
+  if (!guild) return null;
+  try {
+    const fetched = await guild.channels.fetch().catch(() => guild.channels.cache);
+    const channels = fetched || guild.channels.cache;
+
+    // Look for existing category matching name or keywords with capacity
+    let targetCat = channels.find(
+      (c) =>
+        c &&
+        c.type === ChannelType.GuildCategory &&
+        (c.name.toLowerCase() === targetCategoryName.toLowerCase() ||
+         searchKeywords.some((kw) => c.name.toLowerCase().includes(kw.toLowerCase()))) &&
+        (!c.children || !c.children.cache || c.children.cache.size < 50)
+    );
+
+    if (targetCat) return targetCat;
+
+    // Create the category if not found
+    const permissionOverwrites = [
+      {
+        id: guild.roles.everyone.id,
+        deny: [PermissionFlagsBits.ViewChannel]
+      },
+      {
+        id: guild.members.me.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.EmbedLinks,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.ManageMessages
+        ]
+      }
+    ];
+
+    if (config.tickets.supportRoleId && guild.roles.cache.has(config.tickets.supportRoleId)) {
+      permissionOverwrites.push({
+        id: config.tickets.supportRoleId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks
+        ]
+      });
+    }
+
+    targetCat = await guild.channels.create({
+      name: targetCategoryName,
+      type: ChannelType.GuildCategory,
+      permissionOverwrites
+    }).catch((err) => {
+      console.warn(`[TicketManager] Could not create category ${targetCategoryName}:`, err.message);
+      return null;
+    });
+
+    return targetCat;
+  } catch (err) {
+    console.warn(`[TicketManager] Error ensuring category ${targetCategoryName}:`, err.message);
+    return null;
+  }
+}
+
+/**
  * Handles creating, managing, and closing ticket channels.
  */
 module.exports = {
+  ensureCategory,
+
   /**
    * Creates a new ticket channel for a user.
    */
@@ -79,17 +152,29 @@ module.exports = {
       });
     }
 
-    // 4. Create Channel
+    // 4. Determine initial Category Parent
+    let parentCategoryId = null;
+    if (categoryId === 'purchase_vps') {
+      const purchaseCat = await ensureCategory(guild, '🛒 Ready to Purchase VPS', ['ready to purchase', 'purchase vps', 'purchase', 'sales', 'buy vps']);
+      if (purchaseCat) parentCategoryId = purchaseCat.id;
+    } else if (config.tickets.categoryId && guild.channels.cache.has(config.tickets.categoryId)) {
+      parentCategoryId = config.tickets.categoryId;
+    } else {
+      const standardCat = await ensureCategory(guild, '🟢 Standard Tickets', ['standard', 'green', 'tickets']);
+      if (standardCat) parentCategoryId = standardCat.id;
+    }
+
+    // 5. Create Channel
     try {
       const channel = await guild.channels.create({
         name: channelName,
         type: ChannelType.GuildText,
-        parent: config.tickets.categoryId || null,
+        parent: parentCategoryId,
         topic: `${categoryData.label} Support for ${user.tag} (${user.id}) | Ticket #${formattedNumber}`,
         permissionOverwrites: permissionOverwrites
       });
 
-      // 5. Save to database
+      // 6. Save to database
       db.createTicket(channel.id, {
         userId: user.id,
         guildId: guild.id,
@@ -97,7 +182,7 @@ module.exports = {
         category: categoryId
       });
 
-      // 6. Send Greeting Embed & Ticket Controls
+      // 7. Send Greeting Embed & Ticket Controls
       const greeting = embedBuilder.createTicketGreeting(user, ticketNumber, categoryId);
       await channel.send(greeting);
 
@@ -114,7 +199,7 @@ module.exports = {
   /**
    * Closes a ticket channel and generates transcripts.
    */
-  async closeTicket(channel, closedByUser) {
+  async closeTicket(channel, closedByUser, closeReason = 'Closed by user request') {
     const ticketData = db.getTicket(channel.id);
     if (!ticketData) {
       return { success: false, error: 'This channel is not a tracked ticket.' };
@@ -133,6 +218,9 @@ module.exports = {
       // Rename channel to closed
       const formattedNum = String(ticketData.ticketNumber).padStart(4, '0');
       await channel.setName(`closed-${formattedNum}`).catch((err) => console.warn('Could not rename channel on close:', err.message));
+
+      // Move channel to closed category if available
+      await this.sortTicketIntoCategory(channel, 'closed');
 
       // 2. Generate transcript safely
       let transcriptAttachment = null;
@@ -219,6 +307,9 @@ module.exports = {
       const formattedNum = String(ticketData.ticketNumber).padStart(4, '0');
       await channel.setName(`ticket-${formattedNum}`).catch(() => {});
 
+      // Move back to priority category or standard
+      await this.sortTicketIntoCategory(channel, ticketData.priority || 'green', ticketData.category);
+
       await channel.send({
         content: `🔓 Ticket re-opened by <@${reopenedByUser.id}>.`
       });
@@ -237,91 +328,60 @@ module.exports = {
     db.deleteTicket(channel.id);
     await channel.send('⛔ *Deleting ticket channel in 5 seconds...*');
     setTimeout(async () => {
-      await channel.delete(`Ticket deleted by ${deletedByUser.tag}`).catch(console.error);
+      await channel.delete(`Ticket deleted by ${deletedByUser.tag || deletedByUser.username || 'Staff'}`).catch(console.error);
     }, 5000);
   },
 
   /**
-   * Sorts the ticket into the corresponding priority Discord category.
+   * Sorts the ticket into the corresponding Discord category (Ready to Purchase, Critical, Elevated, Standard, Closed).
    */
-  async sortTicketIntoCategory(channel, priority) {
+  async sortTicketIntoCategory(channel, priority = 'green', categoryId = null) {
     if (!channel || !channel.guild) return;
     const guild = channel.guild;
     const normPriority = (priority || 'green').toLowerCase();
 
     let targetCategoryName = '🟢 Standard Tickets';
-    let searchKeywords = ['standard', 'green'];
-    if (normPriority === 'red') {
+    let searchKeywords = ['standard', 'green', 'tickets'];
+
+    if (normPriority === 'closed') {
+      targetCategoryName = '📁 Closed Tickets';
+      searchKeywords = ['closed tickets', 'closed', 'archive', 'transcripts'];
+    } else if (categoryId === 'purchase_vps' || normPriority === 'purchase' || normPriority === 'sales') {
+      targetCategoryName = '🛒 Ready to Purchase VPS';
+      searchKeywords = ['ready to purchase', 'purchase vps', 'purchase', 'sales', 'buy vps', 'orders'];
+    } else if (normPriority === 'red' || normPriority === 'emergency' || normPriority === 'critical') {
       targetCategoryName = '🔴 Critical Emergency';
       searchKeywords = ['critical', 'emergency', 'red'];
-    } else if (normPriority === 'yellow' || normPriority === 'orange') {
+    } else if (normPriority === 'yellow' || normPriority === 'orange' || normPriority === 'elevated' || normPriority === 'moderate') {
       targetCategoryName = '🟡 Elevated Tickets';
-      searchKeywords = ['elevated', 'yellow', 'orange'];
+      searchKeywords = ['elevated', 'yellow', 'orange', 'moderate'];
     }
 
     try {
-      // 1. Search existing categories in guild
-      let targetCat = guild.channels.cache.find(
-        (c) =>
-          c.type === ChannelType.GuildCategory &&
-          searchKeywords.some((kw) => c.name.toLowerCase().includes(kw))
-      );
-
-      // 2. If category doesn't exist, create it
-      if (!targetCat) {
-        const permissionOverwrites = [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel]
-          },
-          {
-            id: guild.members.me.id,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.ManageChannels,
-              PermissionFlagsBits.SendMessages
-            ]
-          }
-        ];
-
-        if (config.tickets.supportRoleId && guild.roles.cache.has(config.tickets.supportRoleId)) {
-          permissionOverwrites.push({
-            id: config.tickets.supportRoleId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory
-            ]
-          });
-        }
-
-        targetCat = await guild.channels.create({
-          name: targetCategoryName,
-          type: ChannelType.GuildCategory,
-          permissionOverwrites
-        }).catch((err) => {
-          console.warn(`Could not create category ${targetCategoryName}:`, err.message);
-          return null;
-        });
-      }
-
-      // 3. Move channel into target category if found
+      const targetCat = await ensureCategory(guild, targetCategoryName, searchKeywords);
       if (targetCat && channel.parentId !== targetCat.id) {
         await channel.setParent(targetCat.id, { lockPermissions: false }).catch((err) => {
-          console.warn(`Could not move channel to category ${targetCat.name}:`, err.message);
+          console.warn(`[TicketManager] Could not move channel to category ${targetCat.name}:`, err.message);
         });
       }
     } catch (err) {
-      console.warn('Error sorting ticket into category:', err.message);
+      console.warn('[TicketManager] Error sorting ticket into category:', err.message);
     }
   },
 
   /**
-   * Renames ticket with priority emoji and summarized slug, e.g. 🟢-vps-network-issue
+   * Renames ticket with priority emoji and summarized slug, e.g. 🔴-dashboard-outage or 🛒-vps-order
    */
-  async updateTicketNameAndPriority(channel, priority, slug) {
+  async updateTicketNameAndPriority(channel, priority, slug, categoryId = null) {
     const normPriority = (priority || 'green').toLowerCase();
-    const emoji = normPriority === 'red' ? '🔴' : normPriority === 'yellow' ? '🟡' : '🟢';
+    let emoji = '🟢';
+    if (categoryId === 'purchase_vps' || normPriority === 'purchase' || normPriority === 'sales') {
+      emoji = '🛒';
+    } else if (normPriority === 'red' || normPriority === 'emergency' || normPriority === 'critical') {
+      emoji = '🔴';
+    } else if (normPriority === 'yellow' || normPriority === 'orange' || normPriority === 'elevated') {
+      emoji = '🟡';
+    }
 
     const cleanSlug = (slug || 'support-request')
       .toLowerCase()
@@ -337,6 +397,7 @@ module.exports = {
     });
 
     // Also sort into Discord category
-    await this.sortTicketIntoCategory(channel, priority);
+    await this.sortTicketIntoCategory(channel, priority, categoryId);
   }
 };
+

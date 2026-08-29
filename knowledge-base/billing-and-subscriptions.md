@@ -1,7 +1,7 @@
 # Billing and Subscriptions Policy
 
 ### What payment methods are accepted?
-We accept Stripe, PayPal, Credit/Debit cards (Visa, MasterCard, Amex), and Cryptocurrencies (BTC, ETH, SOL, USDT).
+We accept Cryptocurrencies (BTC, ETH, SOL, USDT).
 
 ### What is the Refund Policy?
 - We offer a full 7-day money-back guarantee for first-time purchases if you are unsatisfied.

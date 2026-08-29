@@ -1,13 +1,4 @@
-const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  Collection,
-  REST,
-  Routes,
-  ChannelType,
-  MessageFlags
-} = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, ChannelType, MessageFlags } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
@@ -16,6 +7,7 @@ const { handleMessage } = require('./handlers/messageHandler');
 const { handleDM } = require('./handlers/dmHandler');
 const { getKnowledgeContext } = require('./ai/knowledgeBase');
 const { warmupConnection } = require('./ai/client');
+const { scheduleNextHappyHour } = require('./utils/happyHour');
 
 // Create Discord Client with required Intents including Direct Messages
 const client = new Client({
@@ -94,6 +86,12 @@ client.once('clientReady', async () => {
 
   // Warm up the AI HTTP connection pool to avoid cold-start latency on the first ticket
   setTimeout(() => warmupConnection(), 2000);
+
+  // Start the Happy Hour scheduler (random 2–22h delay between events)
+  if (config.happyHour.enabled && config.happyHour.channelId) {
+    scheduleNextHappyHour(client);
+    console.log(`[HappyHour] Scheduler started — channel: ${config.happyHour.channelId}`);
+  }
 });
 
 // Interaction Event (Slash Commands & Buttons)

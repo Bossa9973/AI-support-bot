@@ -49,7 +49,9 @@ if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
 }
 
 const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '350', 10);
-const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter' ? 'poolside/laguna-s-2.1:free' : 'nvidia/nemotron-3.5-lightning-30b-a3b');
+const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter'
+  ? 'poolside/laguna-s-2.1:free'
+  : 'nvidia/nemotron-3.5-lightning-30b-a3b');
 
 const activeAIConfig = selectedProvider === 'nvidia'
   ? {
@@ -92,7 +94,7 @@ module.exports = {
   // Active AI Config
   ai: activeAIConfig,
 
-  // Provider specific blocks
+  // Provider specific blocks (kept for any code that reads these directly)
   openRouter: {
     get apiKey() { return activeAIConfig.apiKey; },
     get model() { return activeAIConfig.model; },
@@ -108,9 +110,28 @@ module.exports = {
     categoryId: process.env.TICKET_CATEGORY_ID || null,
     supportRoleId: process.env.SUPPORT_ROLE_ID || null,
     transcriptChannelId: process.env.TRANSCRIPT_CHANNEL_ID || null,
-    greetingMessage: process.env.TICKET_GREETING_MESSAGE || "Hello {user}, thank you for reaching out! 👋\nDescribe your issue or question and **Eon**, our AI support agent, will be right with you.",
+    greetingMessage: process.env.TICKET_GREETING_MESSAGE ||
+      "Hello {user}, thank you for reaching out! 👋\nDescribe your issue or question and **Eon**, our AI support agent, will be right with you.",
     embedColor: process.env.EMBED_COLOR || '#5865F2',
     channelPrefix: 'ticket-',
     maxTicketsPerUser: 1
+  },
+
+  // Vertex Panel Integration
+  panel: {
+    url: (process.env.PANEL_URL || '').replace(/\/$/, ''), // strip trailing slash
+    botSecret: process.env.PANEL_BOT_SECRET || '',
+    enabled: !!(process.env.PANEL_URL && process.env.PANEL_BOT_SECRET),
+    timeoutMs: parseInt(process.env.PANEL_TIMEOUT_MS || '5000', 10)
+  },
+
+  // Happy Hour VPS Event System (additive — bot is still the AI support agent)
+  happyHour: {
+    channelId: process.env.HAPPY_HOUR_CHANNEL_ID || '',
+    enabled: parseBool(process.env.HAPPY_HOUR_ENABLED, true),
+    pingRoleId: process.env.HAPPY_HOUR_PING_ROLE_ID || '', // optional role to @mention on announce
+    minDelayHours: parseFloat(process.env.HAPPY_HOUR_MIN_DELAY_HOURS || '2'),
+    maxDelayHours: parseFloat(process.env.HAPPY_HOUR_MAX_DELAY_HOURS || '22'),
+    durationMinutes: parseInt(process.env.HAPPY_HOUR_DURATION_MINUTES || '60', 10)
   }
 };

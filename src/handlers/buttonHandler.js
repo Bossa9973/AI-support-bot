@@ -13,6 +13,8 @@ const knowledgeManager = require('../ai/knowledgeManager');
 const resolutionManager = require('../utils/resolutionManager');
 
 const { isStaffMember } = require('../utils/staffChecker');
+const { executeConfirmedAction, handleActionCancel } = require('./panelActionHandler');
+const { handleClaim: handleHappyHourClaim } = require('../utils/happyHour');
 
 module.exports = {
   /**
@@ -162,7 +164,7 @@ module.exports = {
       }
 
       // Check if user is staff
-      if (!isStaffMember(member)) {
+      if (!isStaffMember(member, guild, user)) {
         const warnEmbed = embedBuilder.createWarningEmbed(
           'Permission Denied',
           'Only verified support team members and administrators can claim tickets.'
@@ -222,7 +224,7 @@ module.exports = {
         return interaction.reply({ embeds: [errEmbed], ephemeral: true });
       }
 
-      if (!isStaffMember(member)) {
+      if (!isStaffMember(member, guild, user)) {
         const warnEmbed = embedBuilder.createWarningEmbed(
           'Permission Denied',
           'Only support team members or administrators can transfer tickets.'
@@ -477,6 +479,58 @@ module.exports = {
       } catch {
         await interaction.reply({ embeds: [declineEmbed] });
       }
+      return;
+    }
+
+    // ── Panel Action Confirmation Buttons ───────────────────────────────────────
+    // Format: panel_action_confirm|<type>|<serverId>|<param>|<ownerDiscordId>
+    if (customId.startsWith('panel_action_confirm|')) {
+      const ticket = db.getTicket(channel?.id);
+
+      // Only ticket owner or staff can confirm
+      const isOwner = ticket && ticket.userId === user.id;
+      const staffMember = isStaffMember(member, guild, user);
+      if (!isOwner && !staffMember) {
+        return interaction.reply({
+          content: '❌ Only the ticket owner or staff can confirm this action.',
+          ephemeral: true
+        });
+      }
+
+      // Parse the action from customId
+      const parts = customId.split('|');
+      // parts: [0]=panel_action_confirm [1]=type [2]=serverId [3]=param [4]=ownerDiscordId
+      if (parts.length < 5) {
+        return interaction.reply({ content: '❌ Malformed action button.', ephemeral: true });
+      }
+
+      const action = {
+        type: parts[1],
+        serverId: Number(parts[2]),
+        param: parts[3],
+        ownerDiscordId: parts[4]
+      };
+
+      // Remove buttons from confirmation message
+      await interaction.message?.edit({ components: [] }).catch(() => {});
+
+      await executeConfirmedAction(interaction, action);
+      return;
+    }
+
+    if (customId === 'panel_action_cancel') {
+      await handleActionCancel(interaction);
+      return;
+    }
+
+    // ── Happy Hour Claim Button ──────────────────────────────────────
+    // Format: happy_hour_claim|<eventId>
+    if (customId.startsWith('happy_hour_claim|')) {
+      const eventId = customId.split('|')[1];
+      if (!eventId) {
+        return interaction.reply({ content: '❌ Malformed claim button.', ephemeral: true });
+      }
+      await handleHappyHourClaim(interaction, eventId);
       return;
     }
   }

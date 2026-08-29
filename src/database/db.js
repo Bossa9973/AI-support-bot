@@ -15,7 +15,12 @@ let database = {
   tickets: {},          // channelId -> ticketData
   suggestions: {},      // suggestionId -> suggestion
   pendingQuestions: {}, // gapId -> question
-  drafts: {}            // draftId -> draft
+  drafts: {},           // draftId -> draft
+  happyHour: {          // happy hour event tracking
+    active: null,
+    claims: {},
+    history: []
+  }
 };
 
 // Load database from file
@@ -32,6 +37,9 @@ function loadDB() {
   if (!database.suggestions) database.suggestions = {};
   if (!database.pendingQuestions) database.pendingQuestions = {};
   if (!database.drafts) database.drafts = {};
+  if (!database.happyHour) database.happyHour = { active: null, claims: {}, history: [] };
+  if (!database.happyHour.claims) database.happyHour.claims = {};
+  if (!database.happyHour.history) database.happyHour.history = [];
   saveDB();
 }
 
@@ -234,5 +242,61 @@ module.exports = {
       return database.drafts[id];
     }
     return null;
+  },
+
+  // ───────────────────────────────────────────────
+  // HAPPY HOUR EVENT SYSTEM
+  // ───────────────────────────────────────────────
+
+  /** Store a new active happy hour event. */
+  setHappyHourEvent(event) {
+    if (!database.happyHour) database.happyHour = { active: null, claims: {}, history: [] };
+    database.happyHour.active = event ? { ...event, startedAt: new Date().toISOString() } : null;
+    saveDB();
+    return database.happyHour.active;
+  },
+
+  /** Get current active event or null. */
+  getHappyHourEvent() {
+    return (database.happyHour || {}).active || null;
+  },
+
+  /**
+   * Reserve a claim slot for a user.
+   * Returns { ok: true } or { ok: false, reason }
+   */
+  addHappyHourClaim(eventId, userId) {
+    const event = this.getHappyHourEvent();
+    if (!event || event.id !== eventId) return { ok: false, reason: 'Event no longer active.' };
+    if (event.expired) return { ok: false, reason: 'This Happy Hour has ended.' };
+    if (!database.happyHour.claims[eventId]) database.happyHour.claims[eventId] = [];
+    const claims = database.happyHour.claims[eventId];
+    if (claims.includes(userId)) return { ok: false, reason: 'You already claimed this event!' };
+    if (claims.length >= event.slots) return { ok: false, reason: 'All claim slots are taken!' };
+    claims.push(userId);
+    database.happyHour.active.claimed = claims.length;
+    saveDB();
+    return { ok: true, claimed: claims.length, total: event.slots };
+  },
+
+  /** Get list of user IDs who claimed a specific event. */
+  getHappyHourClaims(eventId) {
+    return (database.happyHour.claims || {})[eventId] || [];
+  },
+
+  /** Mark active event expired and archive it to history. */
+  expireHappyHourEvent() {
+    if (!database.happyHour || !database.happyHour.active) return;
+    database.happyHour.active.expired = true;
+    database.happyHour.active.expiredAt = new Date().toISOString();
+    database.happyHour.history.unshift({ ...database.happyHour.active });
+    if (database.happyHour.history.length > 20) database.happyHour.history.length = 20;
+    database.happyHour.active = null;
+    saveDB();
+  },
+
+  /** Get last N archived happy hour events. */
+  getHappyHourHistory(limit = 10) {
+    return (database.happyHour.history || []).slice(0, limit);
   }
 };

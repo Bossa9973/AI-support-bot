@@ -240,7 +240,7 @@ module.exports = {
   },
 
   /**
-   * Staff Handoff Alert Embed with 3 Priority Tiers.
+   * Staff Handoff Alert Embed with Priority Tiers (Purchase, Emergency/Red, Elevated/Yellow, Standard/Green).
    */
   createStaffHandoffEmbed(summary, priority = 'green', supportRoleId = null) {
     const roleTag = supportRoleId ? `<@&${supportRoleId}>` : '**Support Team**';
@@ -252,13 +252,19 @@ module.exports = {
     let btnStyle = ButtonStyle.Success;
     let btnLabel = 'Claim Ticket';
 
-    if (normPriority === 'red' || normPriority === 'emergency') {
+    if (normPriority === 'purchase' || normPriority === 'sales') {
+      color = BRAND_COLOR;
+      priorityBadge = `${EMOJIS.cart} [VPS PURCHASE / SALES ORDER] Priority: Sales Lead`;
+      urgencyNote = '💰 **SALES INQUIRY**: Customer is ready to purchase or configure a paid VPS plan. Admin/Sales review required!';
+      btnStyle = ButtonStyle.Success;
+      btnLabel = 'Claim Purchase Ticket';
+    } else if (normPriority === 'red' || normPriority === 'emergency' || normPriority === 'critical') {
       color = DANGER_COLOR;
       priorityBadge = `${EMOJIS.emergency} [CRITICAL EMERGENCY] Priority: Emergency`;
       urgencyNote = '🔥 **CRITICAL SEVERITY**: Outage, severe node failure, security issue, or data risk detected. Immediate engineer review required!';
       btnStyle = ButtonStyle.Danger;
       btnLabel = 'Claim Emergency Ticket';
-    } else if (normPriority === 'yellow' || normPriority === 'orange' || normPriority === 'moderate') {
+    } else if (normPriority === 'yellow' || normPriority === 'orange' || normPriority === 'moderate' || normPriority === 'elevated') {
       color = WARNING_COLOR;
       priorityBadge = `${EMOJIS.moderate} [ELEVATED PRIORITY] Priority: Moderate`;
       urgencyNote = 'User has a non-destructive blocker, port/NAT routing request, or billing hurdle requiring staff assistance.';

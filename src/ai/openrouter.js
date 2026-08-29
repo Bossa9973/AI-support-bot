@@ -97,6 +97,12 @@ When users ask what plan fits their project, give a direct confident recommendat
 - **Minecraft (60–140 players Paper/Purpur)**: VPS Medium (32GB / 8 Cores) or XL (50GB / 10 Cores)
 - **Minecraft networks (Velocity + 150–400+ players)**: VPS XXL (64GB) to Enterprise (96GB / 16 Cores)
 - **Proxmox VE / Hypervisor labs**: Nano–Mini = 2–5 LXC; Medium–XL = 6–15 + 2–4 VMs; XXL–Enterprise = 20–40+
+## WORKLOAD SIZING & SALES CONSULTING
+When users ask what plan fits their project, give a direct confident recommendation with the RAM math shown:
+- **Minecraft (10–50 players vanilla/modded)**: VPS Nano (13GB) or Micro (21GB)
+- **Minecraft (60–140 players Paper/Purpur)**: VPS Medium (32GB / 8 Cores) or XL (50GB / 10 Cores)
+- **Minecraft networks (Velocity + 150–400+ players)**: VPS XXL (64GB) to Enterprise (96GB / 16 Cores)
+- **Proxmox VE / Hypervisor labs**: Nano–Mini = 2–5 LXC; Medium–XL = 6–15 + 2–4 VMs; XXL–Enterprise = 20–40+
 - **Pterodactyl game nodes**: Nano–Small = 3–8 servers; Medium–XL = 8–18; XXL–Enterprise = 20–40+
 - **FiveM, Rust, ARK, Palworld**: VPS Medium (32GB) minimum; XL (50GB) or XXL (64GB) for high pop
 
@@ -111,19 +117,26 @@ Always explain the reasoning (RAM math, thread demand, disk needs) and ask about
 **Only trigger [HANDOFF] when:**
 1. User explicitly requests a human / staff / admin
 2. Suspected account compromise or active security emergency → PRIORITY: RED
-3. Verified physical node hardware outage or critical data loss → PRIORITY: RED
-4. Stuck billing/invoice, manual database update, or account unlinking → PRIORITY: YELLOW
-5. Suspended VM admin review after server name and URL are provided → PRIORITY: YELLOW
-6. Knowledge gap that you've tried to pivot around and the user genuinely needs a staff answer → PRIORITY: GREEN
+3. Verified physical node hardware outage or critical data loss or dashboard down → PRIORITY: RED
+4. User is ready to purchase / order a paid VPS or custom server plan → PRIORITY: PURCHASE
+5. Stuck billing/invoice, manual database update, or account unlinking → PRIORITY: YELLOW
+6. Suspended VM admin review after server name and URL are provided → PRIORITY: YELLOW
+7. Knowledge gap that you've tried to pivot around and the user genuinely needs a staff answer → PRIORITY: GREEN
 
-When handing off, say in one sentence who you're passing to and why, then append:
+When handing off, say in one or two clear sentences to the user that you've flagged/escalated this to the team, share any basic interim troubleshooting steps if relevant, then append:
 [HANDOFF]
-PRIORITY: <RED | YELLOW | GREEN>
+PRIORITY: <RED | YELLOW | GREEN | PURCHASE>
 SLUG: <2-4 word hyphenated slug>
 SUMMARY: Core Issue: ... / Context: ... / What user told us: ... / Staff Action Needed: ...
 [/HANDOFF]
 
 The SUMMARY must include everything the user told you (budget, use case, error, context) — not just "user asked about X".
+
+## STRICT ANTI-LEAKAGE & FORMATTING RULES
+- NEVER output staff briefing memos, outage reports, role mentions, or admin ping templates in your user-visible reply.
+- NEVER type @mentions like "@Dictator Kreed", "@Founder", "@Support", or "@Admin" in your response.
+- NEVER output or copy embed syntax like "[Embed Title: ...]", "[Embed Description: ...]", "Selected Category:", or "[ Opened By: ...]".
+- Internal notes and briefings MUST ONLY exist inside the [HANDOFF] block at the very end of your message.
 
 **If you hit a knowledge gap**, provide your best related answer first, then append:
 [KNOWLEDGE_GAP]
@@ -231,6 +244,13 @@ function buildFallbackResponse(userQuery, username, history = []) {
     queryLower.includes('password was stolen') ||
     queryLower.includes('unauthorized access to my account');
 
+  const isPurchaseInquiry =
+    queryLower.includes('purchase vps') ||
+    queryLower.includes('buy vps') ||
+    queryLower.includes('paid vps') ||
+    queryLower.includes('paid plan') ||
+    queryLower.includes('order vps');
+
   if (isSecurityEmergency) {
     return {
       reply: "I am alerting our staff team immediately regarding your account security. Please reset your password and enable 2FA if possible while a team member reviews your account.",
@@ -238,6 +258,17 @@ function buildFallbackResponse(userQuery, username, history = []) {
       priority: 'red',
       slug: 'account-security-alert',
       summary: `CRITICAL: User @${username} reported a suspected account compromise or security issue. Urgent staff verification of account security and recent sessions required.`,
+      closeTicket: false
+    };
+  }
+
+  if (isPurchaseInquiry) {
+    return {
+      reply: "Thanks for your interest in Vertex Nodes paid plans! I've flagged our sales and administration team to assist you with a personalized VPS setup.",
+      handoff: true,
+      priority: 'purchase',
+      slug: 'vps-purchase-inquiry',
+      summary: `User @${username} is inquiring about purchasing a VPS: "${userQuery.slice(0, 150)}"`,
       closeTicket: false
     };
   }
@@ -310,6 +341,29 @@ Does this help, or is there a specific error you're getting when trying to conne
 function buildStandardSystemPrompt(knowledgeBaseText, username, ticketContext = {}) {
   const categoryLabel = ticketContext.categoryLabel || 'General Support';
   const categoryDesc = ticketContext.categoryDescription || 'Assistance with server management and dashboard';
+  const panelContext = ticketContext.panelContext || null;
+
+  // Build optional panel context section
+  const panelSection = panelContext
+    ? `\n${panelContext}\n
+## SAFE PANEL ACTIONS YOU CAN PERFORM
+You now have the ability to perform safe server actions on behalf of the user. To request an action, output an [ACTION:] block **at the end** of your reply (after your user-facing message), on its own line. The system will prompt the user for confirmation before executing — you do NOT execute anything directly.
+
+Format:
+  [ACTION: server_power|<panel_server_id>|start]      — Power on a VM
+  [ACTION: server_power|<panel_server_id>|shutdown]   — Gracefully shut down a VM
+  [ACTION: server_power|<panel_server_id>|reboot]     — Reboot a VM
+  [ACTION: server_rename|<panel_server_id>|<new name>] — Rename a server (max 40 chars)
+
+Rules for using [ACTION:] blocks:
+1. Only output an action block when the user **explicitly asks you** to do the action (e.g. "reboot my server", "rename it to X").
+2. Always describe what you're about to do IN your reply first, THEN append the action block.
+3. Use the server's Panel ID (the integer "ID:" shown in the Panel Context above), not the VMID.
+4. NEVER output action blocks for servers the user doesn't own.
+5. NEVER output action blocks for: delete, reinstall, suspend, balance changes, or any other destructive operations.
+6. If the panel context shows no servers, tell the user you don't see any servers on their account.
+`
+    : '';
 
   return `You are Eon, the AI support agent for Vertex Nodes.
 
@@ -321,13 +375,14 @@ function buildStandardSystemPrompt(knowledgeBaseText, username, ticketContext = 
   1. The user opened this ticket specifically for **${categoryLabel}**.
   2. If the user sends a greeting (e.g. "hey", "hello", "hi"), greet them and immediately ask what they need help with regarding **${categoryLabel}**.
   3. If the user asks what this ticket is about, answer directly: *"You opened this ticket under **${categoryLabel}** (${categoryDesc}). What question or issue do you have?"*
-  4. NEVER fabricate or hallucinate problems that were not mentioned in this chat (e.g. do not claim they have a suspended VM or billing dispute!).
+  4. NEVER fabricate or hallucinate problems that were not mentioned in this chat (e.g. do not claim they have a suspended VM or billing dispute unless the Panel Context above explicitly shows it!).
   5. Provide direct, accurate technical answers with working code/command blocks when applicable.
+  6. NEVER output internal staff briefings, outage reports, admin pings, or embed syntax in your user-visible reply.
 
 --- KNOWLEDGE BASE ---
 ${knowledgeBaseText}
 --- END KNOWLEDGE BASE ---
-${STATIC_PROMPT_SUFFIX}
+${panelSection}${STATIC_PROMPT_SUFFIX}
 
 User: @${username}`;
 }
@@ -387,10 +442,20 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
   if (handoffMatch) {
     handoff = true;
     const block = handoffMatch[0];
-    const priorityMatch = block.match(/PRIORITY:\s*(RED|YELLOW|GREEN|ORANGE|EMERGENCY|MODERATE|MID|LOW)/i);
+    const priorityMatch = block.match(/PRIORITY:\s*(RED|YELLOW|GREEN|PURCHASE|SALES|ORANGE|EMERGENCY|MODERATE|MID|LOW)/i);
     if (priorityMatch) {
       const rawP = priorityMatch[1].toLowerCase();
-      priority = (rawP === 'orange' || rawP === 'moderate' || rawP === 'mid') ? 'yellow' : (rawP === 'emergency' ? 'red' : (rawP === 'low' ? 'green' : rawP));
+      if (rawP === 'purchase' || rawP === 'sales') {
+        priority = 'purchase';
+      } else if (rawP === 'orange' || rawP === 'moderate' || rawP === 'mid') {
+        priority = 'yellow';
+      } else if (rawP === 'emergency') {
+        priority = 'red';
+      } else if (rawP === 'low') {
+        priority = 'green';
+      } else {
+        priority = rawP;
+      }
     }
     const slugMatch = block.match(/SLUG:\s*([a-zA-Z0-9_-]+)/i);
     slug = slugMatch ? slugMatch[1].toLowerCase() : null;
@@ -411,6 +476,38 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
     reply = reply.replace(/\[HANDOFF\][\s\S]*?\[\/HANDOFF\]/i, '').trim();
   }
 
+  // Fallback Handoff Detector: If AI generated an unbracketed outage report, briefing memo, or admin ping
+  if (!handoff) {
+    const isOutageReport =
+      /(?:outage|incident|alert|emergency|dashboard\s+down)\s*report/i.test(reply) ||
+      /staff\s+action\s+needed:/i.test(reply) ||
+      /user\s+troubleshooting\s+steps\s+tried:/i.test(reply) ||
+      /@(?:Dictator|Kreed|Founder|Admin|Support)/i.test(reply);
+
+    const isPurchaseEscalation =
+      /(?:ready to purchase|custom vps order|paid plan inquiry)/i.test(reply) &&
+      /(?:sales|admin|staff)\s+team/i.test(reply);
+
+    if (isOutageReport) {
+      handoff = true;
+      priority = 'red';
+      slug = 'dashboard-outage';
+      summary = `Outage / Emergency Report: User @${username} reported service or dashboard outage. Immediate verification needed.`;
+
+      // Extract details from the report text if possible
+      const issueMatch = reply.match(/Issue:\s*([^\n]+)/i);
+      const actionMatch = reply.match(/Staff Action Needed:\s*([^\n]+)/i);
+      if (issueMatch || actionMatch) {
+        summary = `Core Issue: ${issueMatch ? issueMatch[1].trim() : 'Dashboard/Node outage'}. Action Needed: ${actionMatch ? actionMatch[1].trim() : 'Verify service status'}`;
+      }
+    } else if (isPurchaseEscalation) {
+      handoff = true;
+      priority = 'purchase';
+      slug = 'vps-purchase-order';
+      summary = `Purchase Order: User @${username} is ready to purchase a VPS. Staff assistance requested.`;
+    }
+  }
+
   // 4. Check for [KNOWLEDGE_GAP] (including any variants like [CLOSED KNOWLEDGE_GAP])
   let knowledgeGap = null;
   const kgMatch = reply.match(/\[(?:CLOSED\s+)?KNOWLEDGE_GAP\][\s\S]*?(?:\[\/(?:CLOSED\s+)?KNOWLEDGE_GAP\]|$)/i);
@@ -425,15 +522,28 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
     reply = reply.replace(/\[(?:CLOSED\s+)?KNOWLEDGE_GAP\][\s\S]*?(?:\[\/(?:CLOSED\s+)?KNOWLEDGE_GAP\]|$)/gi, '').trim();
   }
 
-  // 5. Universal Tag Scrubber: Clean any lingering internal tags or protocol lines from the message
+  // 5. Universal Tag & Internal Memo Scrubber: Clean any lingering internal tags, outage memos, role mentions, or embed template lines
   reply = reply
+    // Remove internal control tags
     .replace(/\[(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)\][\s\S]*?\[\/(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)\]/gi, '')
     .replace(/\[\/?(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING|SYSTEM_[A-Z_]+)[\s\S]*?\]/gi, '')
     .replace(/\[\/?(?:CLOSED\s+)?(?:KNOWLEDGE_GAP|HANDOFF|CLOSE_TICKET|DELETE_TICKET|RESOLVE_TICKET|ARCHIVE_TICKET|TICKET_CLOSE|RESOLVE_PROMPT|REPING)\]/gi, '')
+    // Remove leaked embed tokens like [Embed Title: ...] [Embed Description: ...]
+    .replace(/\[Embed Title:[^\]]*\]/gi, '')
+    .replace(/\[Embed Description:[\s\S]*?\]/gi, '')
+    .replace(/\[\s*(?:Opened By|Category|Eon):[^\]]*\]/gi, '')
+    // Remove internal outage report blocks that leaked into text
+    .replace(/@(?:Dictator\s+)?Kreed[^\n]*/gi, '')
+    .replace(/@(?:Founder|Admin|Staff|Support)[^\n]*/gi, '')
+    .replace(/⚠️\s*Dashboard Outage Report\s*⚠️[\s\S]*?(?=(?:\n\n|\n[A-Z]|$))/gi, '')
+    .replace(/Reported By:\s*@[^\n]*/gi, '')
+    .replace(/User Troubleshooting Steps Tried:[^\n]*/gi, '')
+    .replace(/Staff Action Needed:[^\n]*/gi, '')
+    // Remove field labels
     .replace(/REASON:\s*[^\n]+/gi, '')
     .replace(/TOPIC:\s*[^\n]+/gi, '')
     .replace(/QUESTION:\s*[^\n]+/gi, '')
-    .replace(/PRIORITY:\s*(?:RED|YELLOW|GREEN|ORANGE|EMERGENCY|MODERATE|MID|LOW)/gi, '')
+    .replace(/PRIORITY:\s*(?:RED|YELLOW|GREEN|PURCHASE|SALES|ORANGE|EMERGENCY|MODERATE|MID|LOW)/gi, '')
     .replace(/SLUG:\s*[a-zA-Z0-9_-]+/gi, '')
     .replace(/SUMMARY:\s*[^\n]+/gi, '')
     .trim();
@@ -479,7 +589,8 @@ async function generateSupportResponse(conversationHistory, userQuery, username 
     lastSummary = '',
     category = 'general_support',
     categoryLabel = 'General Support',
-    categoryDescription = 'Assistance with server management and dashboard'
+    categoryDescription = 'Assistance with server management and dashboard',
+    panelContext = null  // formatted text block from panelContextFormatter
   } = ticketState;
 
   const combinedContextText = [
@@ -576,7 +687,8 @@ User: @${username}`;
   const systemPrompt = buildStandardSystemPrompt(knowledgeBaseText, username, {
     category,
     categoryLabel,
-    categoryDescription
+    categoryDescription,
+    panelContext // injected when panel integration is enabled
   });
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -622,7 +734,7 @@ async function generateSupportResponseStream(
   imageUrls = [],
   onChunk = null
 ) {
-  // Direct fast completion (no SSE connection bottleneck)
+  // Direct fast completion — panelContext is forwarded via ticketState
   return generateSupportResponse(conversationHistory, userQuery, username, ticketState, imageUrls);
 }
 
