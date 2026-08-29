@@ -130,6 +130,7 @@ module.exports = {
     channelId: process.env.HAPPY_HOUR_CHANNEL_ID || '',
     enabled: parseBool(process.env.HAPPY_HOUR_ENABLED, true),
     pingRoleId: process.env.HAPPY_HOUR_PING_ROLE_ID || '', // optional role to @mention on announce
+    adminRoleId: (process.env.HAPPY_HOUR_ADMIN_ROLE_ID || process.env.ADMIN_ROLE_ID || '').trim(), // optional admin role allowed to trigger/schedule
     minDelayHours: parseFloat(process.env.HAPPY_HOUR_MIN_DELAY_HOURS || '2'),
     maxDelayHours: parseFloat(process.env.HAPPY_HOUR_MAX_DELAY_HOURS || '22'),
     durationMinutes: parseInt(process.env.HAPPY_HOUR_DURATION_MINUTES || '60', 10)

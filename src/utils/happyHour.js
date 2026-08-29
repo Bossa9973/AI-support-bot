@@ -162,6 +162,127 @@ function buildHappyHourEvent() {
   };
 }
 
+/**
+ * Build a customized or randomized event object based on options.
+ * @param {object} [options]
+ * @param {string} [options.tier]
+ * @param {string} [options.planId]
+ * @param {number} [options.discount]
+ * @param {number} [options.slots]
+ * @param {string} [options.reqType]
+ * @param {number} [options.durationMinutes]
+ */
+function buildCustomHappyHourEvent(options = {}) {
+  const tier = options.tier || rollEventType();
+  const plan = options.planId
+    ? (VPS_PLANS.find(p => p.id.toLowerCase() === options.planId.toLowerCase()) || rollPlan())
+    : rollPlan();
+  const discount = options.discount ? parseInt(options.discount, 10) : rollDiscount(tier);
+  const slots = options.slots ? parseInt(options.slots, 10) : rollSlots(tier);
+  const reqType = options.reqType || rollRequirementType(tier);
+  const durationMinutes = options.durationMinutes
+    ? parseInt(options.durationMinutes, 10)
+    : config.happyHour.durationMinutes;
+
+  const mult = 1 - discount / 100;
+  const discountedInvites = Math.ceil(plan.invites * mult);
+  const discountedBolts   = Math.round(plan.bolts  * mult);
+
+  return {
+    id:                randomUUID(),
+    tier,
+    plan,
+    discount,
+    slots,
+    claimed:           0,
+    reqType,
+    discountedInvites,
+    discountedBolts,
+    durationMinutes,
+    expired:           false,
+    announceMessageId: null,
+    announceChannelId: null
+  };
+}
+
+/**
+ * Parse time string into { targetDate, delayMs }
+ * Supports:
+ *   - Relative: "15m", "30min", "2h", "1h 30m", "1d", or plain numbers (minutes)
+ *   - Clock time: "15:30", "3:30pm", "20:00 UTC"
+ *   - Full ISO / date string: "2026-08-30 18:00"
+ * @param {string} inputStr
+ * @returns {{ targetDate: Date, delayMs: number }|null}
+ */
+function parseTimeInput(inputStr) {
+  if (!inputStr || typeof inputStr !== 'string') return null;
+  const str = inputStr.trim();
+  const now = Date.now();
+
+  // 1. Plain number of minutes (e.g. "30")
+  if (/^\d+$/.test(str)) {
+    const mins = parseInt(str, 10);
+    if (mins <= 0) return null;
+    const delayMs = mins * 60 * 1000;
+    return { targetDate: new Date(now + delayMs), delayMs };
+  }
+
+  // 2. Relative offset (e.g. "1d", "2h", "30m", "1h30m", "45mins")
+  const relRegex = /^(?:(\d+)\s*(?:d|days?)\s*)?(?:(\d+)\s*(?:h|hrs?|hours?)\s*)?(?:(\d+)\s*(?:m|mins?|minutes?)\s*)?(?:(\d+)\s*(?:s|secs?|seconds?))?$/i;
+  const relMatch = str.match(relRegex);
+  if (relMatch && (relMatch[1] || relMatch[2] || relMatch[3] || relMatch[4])) {
+    const days  = parseInt(relMatch[1] || '0', 10);
+    const hours = parseInt(relMatch[2] || '0', 10);
+    const mins  = parseInt(relMatch[3] || '0', 10);
+    const secs  = parseInt(relMatch[4] || '0', 10);
+    const totalMs = ((days * 24 + hours) * 60 + mins) * 60 * 1000 + secs * 1000;
+    if (totalMs > 0) {
+      return { targetDate: new Date(now + totalMs), delayMs: totalMs };
+    }
+  }
+
+  // 3. Clock time (e.g. "15:30", "3:30pm", "03:30 PM", "15:30 UTC")
+  const timeRegex = /^(\d{1,2}):(\d{2})(?:\s*(am|pm))?(?:\s*(utc|gmt))?$/i;
+  const timeMatch = str.match(timeRegex);
+  if (timeMatch) {
+    let hours   = parseInt(timeMatch[1], 10);
+    const mins  = parseInt(timeMatch[2], 10);
+    const ampm  = timeMatch[3]?.toLowerCase();
+    const isUtc = !!timeMatch[4];
+
+    if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
+
+    if (ampm === 'pm' && hours < 12) hours += 12;
+    if (ampm === 'am' && hours === 12) hours = 0;
+
+    const target = new Date();
+    if (isUtc) {
+      target.setUTCHours(hours, mins, 0, 0);
+      if (target.getTime() <= now) {
+        target.setUTCDate(target.getUTCDate() + 1);
+      }
+    } else {
+      target.setHours(hours, mins, 0, 0);
+      if (target.getTime() <= now) {
+        target.setDate(target.getDate() + 1);
+      }
+    }
+    const delayMs = target.getTime() - now;
+    return { targetDate: target, delayMs };
+  }
+
+  // 4. ISO or standard Date string parse (e.g. "2026-08-30 18:00")
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const delayMs = parsed.getTime() - now;
+    if (delayMs > 0) {
+      return { targetDate: parsed, delayMs };
+    }
+  }
+
+  return null;
+}
+
 // ─── Embed builder ────────────────────────────────────────────────────────────
 
 const TIER_META = {
@@ -191,7 +312,7 @@ function buildAnnounceEmbed(event, minutesLeft = null) {
   const meta     = TIER_META[event.tier] || TIER_META.regular;
   const plan     = event.plan;
   const slotsLeft = event.slots - event.claimed;
-  const duration  = config.happyHour.durationMinutes;
+  const duration  = event.durationMinutes || config.happyHour.durationMinutes || 60;
   const timeStr   = minutesLeft !== null ? `${minutesLeft} minutes` : `${duration} minutes`;
 
   const desc = [
@@ -242,7 +363,7 @@ let _scheduleTimer = null;
 /**
  * Post the happy hour announcement and start the expiry timer.
  * @param {import('discord.js').Client} client
- * @param {object|null} forcedEvent — pass a pre-built event to skip rolling (for /happyhour trigger)
+ * @param {object|null} forcedEvent — pass a pre-built event to skip rolling (for /happyhour trigger or schedule)
  */
 async function startHappyHour(client, forcedEvent = null) {
   const cfg = config.happyHour;
@@ -251,6 +372,9 @@ async function startHappyHour(client, forcedEvent = null) {
     scheduleNextHappyHour(client);
     return;
   }
+
+  // Clear any scheduled event in database since an event is firing now
+  db.clearScheduledHappyHour();
 
   // Cancel any existing active event first
   const existing = db.getHappyHourEvent();
@@ -293,7 +417,8 @@ async function startHappyHour(client, forcedEvent = null) {
     console.log(`[HappyHour] 🎉 ${tierLabel} event started: ${event.plan.name} — ${event.discount}% off | ${event.slots} slots | req: ${event.reqType}`);
 
     // Schedule expiry
-    const durationMs = cfg.durationMinutes * 60 * 1000;
+    const durationMinutes = event.durationMinutes || cfg.durationMinutes || 60;
+    const durationMs = durationMinutes * 60 * 1000;
     if (_expiryTimer) clearTimeout(_expiryTimer);
     _expiryTimer = setTimeout(() => expireHappyHour(client, event.id), durationMs);
 
@@ -342,13 +467,41 @@ async function expireHappyHour(client, eventId, silent = false) {
 }
 
 /**
- * Schedule the next happy hour after a random delay.
+ * Schedule the next happy hour after a random delay or from a custom admin schedule.
  * @param {import('discord.js').Client} client
  */
 function scheduleNextHappyHour(client) {
   const cfg = config.happyHour;
   if (!cfg.enabled) return;
 
+  // 1. Check if a custom scheduled event is queued in DB
+  const scheduled = db.getScheduledHappyHour();
+  if (scheduled && scheduled.scheduledFor) {
+    const targetMs = new Date(scheduled.scheduledFor).getTime();
+    const now = Date.now();
+    const diffMs = targetMs - now;
+
+    if (diffMs > 0) {
+      const diffHours = (diffMs / 3600000).toFixed(2);
+      console.log(`[HappyHour] 📅 Scheduled custom event in ${diffHours}h (${scheduled.scheduledFor})`);
+      if (_scheduleTimer) clearTimeout(_scheduleTimer);
+      _scheduleTimer = setTimeout(async () => {
+        const toRun = db.getScheduledHappyHour();
+        db.clearScheduledHappyHour();
+        await startHappyHour(client, toRun?.event || null);
+      }, diffMs);
+      return;
+    } else {
+      // Event time has passed. If within 5 min (e.g. restart delay), start it immediately, else clear.
+      db.clearScheduledHappyHour();
+      if (Math.abs(diffMs) < 5 * 60 * 1000) {
+        startHappyHour(client, scheduled.event || null);
+        return;
+      }
+    }
+  }
+
+  // 2. Default randomized interval
   const minMs = cfg.minDelayHours * 60 * 60 * 1000;
   const maxMs = cfg.maxDelayHours * 60 * 60 * 1000;
   const delayMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
@@ -358,6 +511,43 @@ function scheduleNextHappyHour(client) {
 
   if (_scheduleTimer) clearTimeout(_scheduleTimer);
   _scheduleTimer = setTimeout(() => startHappyHour(client), delayMs);
+}
+
+/**
+ * Schedule a future Happy Hour at a specific target Date/Time.
+ * @param {import('discord.js').Client} client
+ * @param {Date} targetDate
+ * @param {object} [customOptions]
+ * @param {string} [scheduledBy]
+ */
+function scheduleHappyHourAt(client, targetDate, customOptions = {}, scheduledBy = null) {
+  const event = buildCustomHappyHourEvent(customOptions);
+  const scheduledData = {
+    scheduledFor: targetDate.toISOString(),
+    scheduledBy: scheduledBy || null,
+    createdAt: new Date().toISOString(),
+    event
+  };
+
+  db.setScheduledHappyHour(scheduledData);
+  scheduleNextHappyHour(client);
+  return { scheduledData, event };
+}
+
+/**
+ * Cancel the upcoming scheduled Happy Hour event.
+ * @param {import('discord.js').Client} client
+ */
+function cancelScheduledHappyHour(client) {
+  const scheduled = db.getScheduledHappyHour();
+  if (!scheduled) return false;
+  if (_scheduleTimer) {
+    clearTimeout(_scheduleTimer);
+    _scheduleTimer = null;
+  }
+  db.clearScheduledHappyHour();
+  scheduleNextHappyHour(client);
+  return true;
 }
 
 /**
@@ -452,15 +642,44 @@ async function handleClaim(interaction, eventId) {
   });
 }
 
-// ─── Cancel active happy hour ─────────────────────────────────────────────────
+// ─── Cancel happy hour ────────────────────────────────────────────────────────
 
-async function cancelHappyHour(client) {
-  const event = db.getHappyHourEvent();
-  if (!event || event.expired) return false;
-  if (_expiryTimer) { clearTimeout(_expiryTimer); _expiryTimer = null; }
-  await expireHappyHour(client, event.id, true);
-  scheduleNextHappyHour(client);
-  return true;
+/**
+ * Cancel active and/or scheduled Happy Hours.
+ * @param {import('discord.js').Client} client
+ * @param {'all'|'active'|'scheduled'} [target='all']
+ * @returns {Promise<{ cancelledActive: boolean, cancelledScheduled: boolean }>}
+ */
+async function cancelHappyHour(client, target = 'all') {
+  let cancelledActive = false;
+  let cancelledScheduled = false;
+
+  if (target === 'active' || target === 'all') {
+    const event = db.getHappyHourEvent();
+    if (event && !event.expired) {
+      if (_expiryTimer) { clearTimeout(_expiryTimer); _expiryTimer = null; }
+      await expireHappyHour(client, event.id, true);
+      cancelledActive = true;
+    }
+  }
+
+  if (target === 'scheduled' || target === 'all') {
+    const scheduled = db.getScheduledHappyHour();
+    if (scheduled) {
+      if (_scheduleTimer) {
+        clearTimeout(_scheduleTimer);
+        _scheduleTimer = null;
+      }
+      db.clearScheduledHappyHour();
+      cancelledScheduled = true;
+    }
+  }
+
+  if (cancelledActive || cancelledScheduled) {
+    scheduleNextHappyHour(client);
+  }
+
+  return { cancelledActive, cancelledScheduled };
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
@@ -468,11 +687,15 @@ async function cancelHappyHour(client) {
 module.exports = {
   VPS_PLANS,
   buildHappyHourEvent,
+  buildCustomHappyHourEvent,
+  parseTimeInput,
   buildAnnounceEmbed,
   buildClaimRow,
   startHappyHour,
   expireHappyHour,
   scheduleNextHappyHour,
+  scheduleHappyHourAt,
+  cancelScheduledHappyHour,
   handleClaim,
   cancelHappyHour,
   // Exposed for tests

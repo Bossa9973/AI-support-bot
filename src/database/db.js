@@ -35,9 +35,9 @@ function loadDB() {
   }
   if (!database.tickets) database.tickets = {};
   if (!database.suggestions) database.suggestions = {};
-  if (!database.pendingQuestions) database.pendingQuestions = {};
   if (!database.drafts) database.drafts = {};
-  if (!database.happyHour) database.happyHour = { active: null, claims: {}, history: [] };
+  if (!database.happyHour) database.happyHour = { active: null, scheduled: null, claims: {}, history: [] };
+  if (database.happyHour.scheduled === undefined) database.happyHour.scheduled = null;
   if (!database.happyHour.claims) database.happyHour.claims = {};
   if (!database.happyHour.history) database.happyHour.history = [];
   saveDB();
@@ -298,5 +298,25 @@ module.exports = {
   /** Get last N archived happy hour events. */
   getHappyHourHistory(limit = 10) {
     return (database.happyHour.history || []).slice(0, limit);
+  },
+
+  /** Save a scheduled happy hour event to fire in the future. */
+  setScheduledHappyHour(scheduledData) {
+    if (!database.happyHour) database.happyHour = { active: null, scheduled: null, claims: {}, history: [] };
+    database.happyHour.scheduled = scheduledData;
+    saveDB();
+    return database.happyHour.scheduled;
+  },
+
+  /** Get upcoming scheduled event or null. */
+  getScheduledHappyHour() {
+    return (database.happyHour || {}).scheduled || null;
+  },
+
+  /** Clear scheduled event. */
+  clearScheduledHappyHour() {
+    if (!database.happyHour) database.happyHour = { active: null, scheduled: null, claims: {}, history: [] };
+    database.happyHour.scheduled = null;
+    saveDB();
   }
 };
