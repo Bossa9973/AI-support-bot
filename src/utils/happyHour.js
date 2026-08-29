@@ -16,7 +16,8 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  MessageFlags
 } = require('discord.js');
 const { randomUUID } = require('crypto');
 const config = require('../config');
@@ -564,7 +565,7 @@ async function handleClaim(interaction, eventId) {
 
   // Validate event still active
   if (!event || event.id !== eventId || event.expired) {
-    return interaction.reply({ content: '⏰ This Happy Hour has already ended!', ephemeral: true });
+    return interaction.reply({ content: '⏰ This Happy Hour has already ended!', flags: MessageFlags.Ephemeral });
   }
 
   // Booster check
@@ -573,7 +574,7 @@ async function handleClaim(interaction, eventId) {
     if (!isBoosting) {
       return interaction.reply({
         content: '<:roti_boost:1> This Happy Hour is **Booster Exclusive**. You need to be actively boosting this server to claim it!',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }
@@ -582,7 +583,7 @@ async function handleClaim(interaction, eventId) {
   const result = db.addHappyHourClaim(eventId, user.id);
 
   if (!result.ok) {
-    return interaction.reply({ content: `❌ ${result.reason}`, ephemeral: true });
+    return interaction.reply({ content: `❌ ${result.reason}`, flags: MessageFlags.Ephemeral });
   }
 
   // Update announcement embed slot counter
@@ -615,7 +616,7 @@ async function handleClaim(interaction, eventId) {
   if (!ticketResult.success) {
     return interaction.reply({
       content: `✅ Slot reserved! You already have an open ticket at <#${guild.channels.cache.find(c => c.name?.includes(user.username.toLowerCase()))?.id ?? '?'}>. Please mention your Happy Hour claim there.`,
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
@@ -638,7 +639,7 @@ async function handleClaim(interaction, eventId) {
 
   return interaction.reply({
     content: `✅ Slot reserved! Head to <#${ticketResult.channel.id}> to complete your claim.`,
-    ephemeral: true
+    flags: MessageFlags.Ephemeral
   });
 }
 

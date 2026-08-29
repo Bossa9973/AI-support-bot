@@ -2,7 +2,8 @@ const {
   PermissionFlagsBits,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  MessageFlags
 } = require('discord.js');
 const ticketManager = require('../utils/ticketManager');
 const embedBuilder = require('../utils/embedBuilder');
@@ -26,7 +27,7 @@ module.exports = {
 
     // 0. Handle Ticket Category Dropdown Select Menu
     if (customId === 'ticket_category_select' || (typeof interaction.isStringSelectMenu === 'function' && interaction.isStringSelectMenu())) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const selectedCategory = interaction.values?.[0] || 'general_support';
       const categoryData = embedBuilder.getCategoryData(selectedCategory);
@@ -50,7 +51,7 @@ module.exports = {
 
     // 1. Create Ticket (Fallback button)
     if (customId === 'ticket_create') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const result = await ticketManager.createTicketChannel(guild, user, 'general_support');
       if (!result.success) {
@@ -79,7 +80,7 @@ module.exports = {
       try {
         await interaction.update({ embeds: [resolveEmbed], components: [] });
       } catch {
-        await interaction.reply({ embeds: [resolveEmbed], ephemeral: false }).catch(() => {});
+        await interaction.reply({ embeds: [resolveEmbed] }).catch(() => {});
       }
       return ticketManager.closeTicket(channel, user, 'Resolved by user confirmation');
     }
@@ -105,7 +106,7 @@ module.exports = {
     // 4. Close Ticket Request (Show Confirmation)
     if (customId === 'ticket_close_request') {
       const confirmation = embedBuilder.createCloseConfirmation();
-      return interaction.reply({ ...confirmation, ephemeral: true });
+      return interaction.reply({ ...confirmation, flags: MessageFlags.Ephemeral });
     }
 
     // 5. Confirm Close Ticket
@@ -117,7 +118,7 @@ module.exports = {
       try {
         await interaction.update({ embeds: [closingEmbed], components: [] });
       } catch {
-        await interaction.reply({ embeds: [closingEmbed], ephemeral: false }).catch(() => {});
+        await interaction.reply({ embeds: [closingEmbed] }).catch(() => {});
       }
       return ticketManager.closeTicket(channel, user);
     }
@@ -131,13 +132,13 @@ module.exports = {
       try {
         return await interaction.update({ embeds: [cancelEmbed], components: [] });
       } catch {
-        return interaction.reply({ embeds: [cancelEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [cancelEmbed], flags: MessageFlags.Ephemeral });
       }
     }
 
     // 7. Generate Instant Transcript
     if (customId === 'ticket_transcript') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const transcriptAttachment = await generateTranscript(channel);
         const transcriptNotice = embedBuilder.createInfoEmbed(
@@ -160,7 +161,7 @@ module.exports = {
       const ticketData = db.getTicket(channel.id);
       if (!ticketData) {
         const errEmbed = embedBuilder.createErrorEmbed('Error', 'This channel is not an active ticket.');
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
 
       // Check if user is staff
@@ -171,7 +172,7 @@ module.exports = {
         );
         return interaction.reply({
           embeds: [warnEmbed],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -182,7 +183,7 @@ module.exports = {
         );
         return interaction.reply({
           embeds: [warnEmbed],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -221,7 +222,7 @@ module.exports = {
       const ticketData = db.getTicket(channel.id);
       if (!ticketData) {
         const errEmbed = embedBuilder.createErrorEmbed('Error', 'This channel is not an active ticket.');
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
 
       if (!isStaffMember(member, guild, user)) {
@@ -231,7 +232,7 @@ module.exports = {
         );
         return interaction.reply({
           embeds: [warnEmbed],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -269,7 +270,7 @@ module.exports = {
       const ticketData = db.getTicket(channel.id);
       if (!ticketData) {
         const errEmbed = embedBuilder.createErrorEmbed('Error', 'This channel is not an active ticket.');
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
 
       if (!isStaffMember(member, interaction.guild, user)) {
@@ -277,7 +278,7 @@ module.exports = {
           'Permission Denied',
           'Only support team members or administrators can resume AI assistance.'
         );
-        return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [warnEmbed], flags: MessageFlags.Ephemeral });
       }
 
       db.updateTicket(channel.id, { continueWithAi: true, claimedBy: null, staffActive: false });
@@ -314,10 +315,10 @@ module.exports = {
           'Permission Denied',
           'Only staff members or administrators can re-open tickets.'
         );
-        return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [warnEmbed], flags: MessageFlags.Ephemeral });
       }
 
-      await interaction.deferReply({ ephemeral: false });
+      await interaction.deferReply();
       const result = await ticketManager.reopenTicket(channel, user);
       if (!result.success) {
         const errEmbed = embedBuilder.createErrorEmbed('Reopen Failed', result.error);
@@ -338,13 +339,13 @@ module.exports = {
           'Permission Denied',
           'Only staff members or administrators can delete ticket channels.'
         );
-        return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [warnEmbed], flags: MessageFlags.Ephemeral });
       }
       const deleteWarning = embedBuilder.createWarningEmbed(
         'Channel Deletion',
         '⛔ Permanently deleting ticket channel in **5 seconds**...'
       );
-      await interaction.reply({ embeds: [deleteWarning], ephemeral: false }).catch(() => {});
+      await interaction.reply({ embeds: [deleteWarning] }).catch(() => {});
       return ticketManager.deleteTicket(channel, user);
     }
 
@@ -354,14 +355,14 @@ module.exports = {
       const suggestion = db.getSuggestion(suggId);
       if (!suggestion) {
         const errEmbed = embedBuilder.createErrorEmbed('Error', `Suggestion \`${suggId}\` not found.`);
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
       if (suggestion.status !== 'pending') {
         const warnEmbed = embedBuilder.createWarningEmbed('Notice', `Suggestion \`${suggId}\` has already been ${suggestion.status}.`);
-        return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [warnEmbed], flags: MessageFlags.Ephemeral });
       }
 
-      await interaction.deferReply({ ephemeral: false });
+      await interaction.deferReply();
 
       try {
         if (suggestion.type === 'lesson') {
@@ -390,7 +391,7 @@ module.exports = {
       const suggestion = db.getSuggestion(suggId);
       if (!suggestion) {
         const errEmbed = embedBuilder.createErrorEmbed('Error', `Suggestion \`${suggId}\` not found.`);
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
       db.rejectSuggestion(suggId);
       const rejectEmbed = embedBuilder.createWarningEmbed(
@@ -406,11 +407,11 @@ module.exports = {
       const draft = db.getDraft(draftId);
       if (!draft) {
         const errEmbed = embedBuilder.createErrorEmbed('Draft Not Found', `Draft \`${draftId}\` was not found or has already been processed.`);
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
       if (draft.status !== 'pending') {
         const warnEmbed = embedBuilder.createWarningEmbed('Notice', `Draft \`${draftId}\` has already been ${draft.status}.`);
-        return interaction.reply({ embeds: [warnEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [warnEmbed], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferUpdate().catch(() => {});
@@ -451,7 +452,7 @@ module.exports = {
         });
       } catch (err) {
         const errEmbed = embedBuilder.createErrorEmbed('Error Saving Draft', err.message);
-        return interaction.followUp({ embeds: [errEmbed], ephemeral: true });
+        return interaction.followUp({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
     }
 
@@ -461,7 +462,7 @@ module.exports = {
       const draft = db.getDraft(draftId);
       if (!draft) {
         const errEmbed = embedBuilder.createErrorEmbed('Error', `Draft \`${draftId}\` not found.`);
-        return interaction.reply({ embeds: [errEmbed], ephemeral: true });
+        return interaction.reply({ embeds: [errEmbed], flags: MessageFlags.Ephemeral });
       }
       db.rejectDraft(draftId);
 
@@ -493,7 +494,7 @@ module.exports = {
       if (!isOwner && !staffMember) {
         return interaction.reply({
           content: '❌ Only the ticket owner or staff can confirm this action.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -501,7 +502,7 @@ module.exports = {
       const parts = customId.split('|');
       // parts: [0]=panel_action_confirm [1]=type [2]=serverId [3]=param [4]=ownerDiscordId
       if (parts.length < 5) {
-        return interaction.reply({ content: '❌ Malformed action button.', ephemeral: true });
+        return interaction.reply({ content: '❌ Malformed action button.', flags: MessageFlags.Ephemeral });
       }
 
       const action = {
@@ -528,7 +529,7 @@ module.exports = {
     if (customId.startsWith('happy_hour_claim|')) {
       const eventId = customId.split('|')[1];
       if (!eventId) {
-        return interaction.reply({ content: '❌ Malformed claim button.', ephemeral: true });
+        return interaction.reply({ content: '❌ Malformed claim button.', flags: MessageFlags.Ephemeral });
       }
       await handleHappyHourClaim(interaction, eventId);
       return;

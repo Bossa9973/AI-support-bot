@@ -8,7 +8,7 @@
  *   cancel   — cancel active and/or scheduled happy hours early (admin / staff / owner)
  */
 
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { isStaffMember } = require('../utils/staffChecker');
 const {
   startHappyHour,
@@ -175,7 +175,7 @@ module.exports = {
     if (!canManageHappyHour(interaction)) {
       return interaction.reply({
         content: '❌ You do not have permission to manage Happy Hours. (Requires Admin or Staff role)',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -183,7 +183,7 @@ module.exports = {
 
     // ── STATUS ────────────────────────────────────────────────────────────────
     if (sub === 'status') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const activeEvent = db.getHappyHourEvent();
       const scheduled   = db.getScheduledHappyHour();
@@ -246,11 +246,11 @@ module.exports = {
       if (!config.happyHour.channelId) {
         return interaction.reply({
           content: '⚠️ No announcement channel configured! Please set `HAPPY_HOUR_CHANNEL_ID` in `.env`.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const customOptions = {
         tier:            interaction.options.getString('tier') || null,
@@ -273,7 +273,7 @@ module.exports = {
       if (!config.happyHour.channelId) {
         return interaction.reply({
           content: '⚠️ No announcement channel configured! Please set `HAPPY_HOUR_CHANNEL_ID` in `.env`.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -283,11 +283,11 @@ module.exports = {
       if (!parsed) {
         return interaction.reply({
           content: '❌ Invalid time format.\n\n**Examples of supported formats:**\n• Relative: `15m`, `30min`, `1h`, `2h`, `1h30m`, `1d`\n• Clock time: `18:00`, `3:30pm`, `20:00 UTC`\n• Full Date: `2026-08-30 15:00`',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const customOptions = {
         tier:            interaction.options.getString('tier') || null,
@@ -327,7 +327,7 @@ module.exports = {
 
     // ── CANCEL ────────────────────────────────────────────────────────────────
     if (sub === 'cancel') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const target = interaction.options.getString('target') || 'all';
       const { cancelledActive, cancelledScheduled } = await cancelHappyHour(interaction.client, target);

@@ -16,7 +16,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  MessageFlags
 } = require('discord.js');
 const panelApi = require('../utils/panelApi');
 const db = require('../database/db');
@@ -141,7 +142,7 @@ async function postActionConfirmation(channel, ticket, action, serverName = '') 
 async function executeConfirmedAction(interaction, action) {
   const { type, serverId, param, ownerDiscordId } = action;
 
-  await interaction.deferReply({ ephemeral: false }).catch(() => {});
+  await interaction.deferReply().catch(() => {});
 
   let resultEmbed;
 
@@ -210,7 +211,7 @@ async function executeConfirmedAction(interaction, action) {
 async function handleActionCancel(interaction) {
   await interaction.reply({
     content: '↩️ Action cancelled.',
-    ephemeral: true
+    flags: MessageFlags.Ephemeral
   }).catch(() => {});
 
   // Remove the confirm/cancel buttons from the original message
