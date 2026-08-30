@@ -23,6 +23,8 @@ module.exports = {
       return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 
+    await interaction.deferReply();
+
     const targetUser = interaction.options.getUser('user');
     await interaction.channel.permissionOverwrites.edit(targetUser.id, {
       ViewChannel: true,
@@ -37,6 +39,6 @@ module.exports = {
       `<@${targetUser.id}> has been granted access to this ticket by <@${interaction.user.id}>.`
     );
 
-    await interaction.reply({ embeds: [successEmbed] });
+    await interaction.editReply({ embeds: [successEmbed] });
   }
 };

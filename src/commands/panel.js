@@ -12,6 +12,8 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const panel = embedBuilder.createTicketPanel(interaction.guild);
     await interaction.channel.send(panel);
 
@@ -20,6 +22,6 @@ module.exports = {
       'The interactive support ticket panel has been posted to this channel.'
     );
 
-    await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+    await interaction.editReply({ embeds: [successEmbed] });
   }
 };

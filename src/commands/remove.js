@@ -35,6 +35,8 @@ module.exports = {
       });
     }
 
+    await interaction.deferReply();
+
     await interaction.channel.permissionOverwrites.delete(targetUser.id);
 
     const successEmbed = embedBuilder.createSuccessEmbed(
@@ -42,6 +44,6 @@ module.exports = {
       `<@${targetUser.id}>'s access to this ticket has been revoked by <@${interaction.user.id}>.`
     );
 
-    await interaction.reply({ embeds: [successEmbed] });
+    await interaction.editReply({ embeds: [successEmbed] });
   }
 };
