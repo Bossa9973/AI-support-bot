@@ -42,7 +42,13 @@ async function panelFetch(url, options = {}) {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       console.warn(`[PanelAPI] ${options.method || 'GET'} ${url} → ${res.status}: ${text.slice(0, 200)}`);
-      return null;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') {
+          return { ok: false, ...parsed };
+        }
+      } catch (_) {}
+      return { ok: false, error: `Panel returned HTTP status ${res.status}` };
     }
 
     return await res.json();

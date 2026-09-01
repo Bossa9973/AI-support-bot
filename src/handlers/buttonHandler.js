@@ -141,17 +141,21 @@ module.exports = {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const transcriptAttachment = await generateTranscript(channel);
+        if (!transcriptAttachment) {
+          const errEmbed = embedBuilder.createErrorEmbed('Transcript Unavailable', 'Unable to retrieve messages for transcript generation at this time.');
+          return interaction.editReply({ embeds: [errEmbed] });
+        }
         const transcriptNotice = embedBuilder.createInfoEmbed(
-          '📑 Instant HTML Transcript',
-          'Here is the complete record of this ticket session. You can download and view this in any web browser.'
+          '📑 Ticket Transcript',
+          'Here is the complete record of this ticket session. You can download and view this file directly.'
         );
         return interaction.editReply({
           embeds: [transcriptNotice],
           files: [transcriptAttachment]
         });
       } catch (err) {
-        console.error('Transcript error:', err);
-        const errEmbed = embedBuilder.createErrorEmbed('Transcript Generation Failed', err.message);
+        console.warn('Transcript error:', err?.message || err);
+        const errEmbed = embedBuilder.createErrorEmbed('Transcript Generation Failed', err?.message || 'Unknown error occurred.');
         return interaction.editReply({ embeds: [errEmbed] });
       }
     }

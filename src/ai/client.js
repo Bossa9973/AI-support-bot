@@ -123,7 +123,7 @@ async function createChatCompletion(params, options = {}) {
         }
       }
 
-      // ─── 3. HANDLE 429 / 529 / 503 / 502 RATE LIMITS & OVERLOADS ──────────────
+      // ─── 4. HANDLE 429 / 529 / 503 / 502 RATE LIMITS & OVERLOADS ──────────────
       const isRetryable =
         status === 429 ||
         status === 529 ||
@@ -133,13 +133,25 @@ async function createChatCompletion(params, options = {}) {
         errMsg.includes('529') ||
         errMsg.includes('overloaded');
 
-      if (isRetryable && attempt < maxAttempts) {
-        const retryAfter = parseInt(err?.response?.headers?.['retry-after'] || '0', 10);
-        const waitMs = retryAfter > 0 ? retryAfter * 1000 : delay;
-        console.warn(`[${context}] ${status || 'Overload/Rate-limit'} — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts})`);
-        await new Promise(r => setTimeout(r, waitMs));
-        delay *= 2;
-        continue;
+      if (isRetryable) {
+        if (attempt < maxAttempts) {
+          const retryAfter = parseInt(err?.response?.headers?.['retry-after'] || '0', 10);
+          const waitMs = retryAfter > 0 ? retryAfter * 1000 : delay;
+          console.warn(`[${context}] ${status || 'Overload/Rate-limit'} (${requestParams.model}) — retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts})`);
+          await new Promise(r => setTimeout(r, waitMs));
+          delay *= 2;
+          continue;
+        }
+
+        // If all retries on the current model are exhausted, try fallback model
+        const fallbackModel = config.ai.fallbackModel || 'minimax/minimax-m3:free';
+        if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
+          console.warn(`[${context}] ⚠️ Rate limits or provider errors exhausted on ${requestParams.model}. Automatically falling back to ${fallbackModel}...`);
+          requestParams.model = fallbackModel;
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 300, 300);
+          attempt = 1;
+          continue;
+        }
       }
 
       throw err;
@@ -191,12 +203,11 @@ async function warmupConnection() {
   }
 
   try {
-    await client.chat.completions.create({
-      model: config.ai.model,
+    await createChatCompletion({
       messages: [{ role: 'user', content: 'ping' }],
       max_tokens: 1,
       temperature: 0
-    });
+    }, { context: config.ai.providerName, maxAttempts: 2 });
     console.log(`[${config.ai.providerName}] Connection warmed up ✓ (${config.ai.model})`);
   } catch (err) {
     console.warn(`[${config.ai.providerName}] Warmup notice: ${err?.message || err}`);
