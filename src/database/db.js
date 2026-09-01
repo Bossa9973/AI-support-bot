@@ -250,10 +250,30 @@ module.exports = {
 
   /** Store a new active happy hour event. */
   setHappyHourEvent(event) {
-    if (!database.happyHour) database.happyHour = { active: null, claims: {}, history: [] };
-    database.happyHour.active = event ? { ...event, startedAt: new Date().toISOString() } : null;
+    if (!database.happyHour) database.happyHour = { active: null, scheduled: null, claims: {}, history: [] };
+    if (event && event.id) {
+      database.happyHour.claims[event.id] = [];
+    }
+    database.happyHour.active = event
+      ? {
+          ...event,
+          startedAt: event.startedAt || new Date().toISOString(),
+          trackedInvites: event.trackedInvites || {}
+        }
+      : null;
     saveDB();
     return database.happyHour.active;
+  },
+
+  /** Increment tracked invites for a user during the active event. */
+  incrementHappyHourInvite(eventId, userId) {
+    if (!database.happyHour || !database.happyHour.active) return 0;
+    if (database.happyHour.active.id !== eventId) return 0;
+    if (!database.happyHour.active.trackedInvites) database.happyHour.active.trackedInvites = {};
+    const count = (database.happyHour.active.trackedInvites[userId] || 0) + 1;
+    database.happyHour.active.trackedInvites[userId] = count;
+    saveDB();
+    return count;
   },
 
   /** Get current active event or null. */

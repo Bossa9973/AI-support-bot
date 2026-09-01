@@ -225,6 +225,199 @@ test('History includes expired event', () => {
   assert.ok(hist[0].expired === true);
 });
 
+// ── 7. Claim Requirement Verification (Invites, BOLTs, Booster) ───────────────
+console.log('\n--- checkClaimEligibility() requirement tests ---');
+
+const { checkClaimEligibility } = require('../src/utils/happyHour');
+const inviteTracker = require('../src/utils/inviteTracker');
+
+const inviteEvent = {
+  id: 'event-invite-test',
+  tier: 'regular',
+  reqType: 'invites',
+  discountedInvites: 5,
+  discountedBolts: 1000,
+  expired: false
+};
+
+test('Invite requirement: 0/5 invites blocked with informative message', () => {
+  const res = checkClaimEligibility({
+    event: inviteEvent,
+    userId: 'user-1',
+    userHhInvites: 0
+  });
+  assert.strictEqual(res.eligible, false);
+  assert.strictEqual(res.current, 0);
+  assert.strictEqual(res.required, 5);
+  assert.strictEqual(res.needed, 5);
+  assert.ok(res.reason.includes('0/5'));
+  assert.ok(res.reason.includes('Happy Hour invites'));
+  assert.ok(res.reason.includes('Stats are tracked after this Happy Hour started'));
+  assert.ok(res.reason.includes('Get **5** more new invites and be the first to claim!'));
+});
+
+test('Invite requirement: partial 3/5 invites blocked with needed count', () => {
+  const res = checkClaimEligibility({
+    event: inviteEvent,
+    userId: 'user-1',
+    userHhInvites: 3
+  });
+  assert.strictEqual(res.eligible, false);
+  assert.strictEqual(res.current, 3);
+  assert.strictEqual(res.needed, 2);
+  assert.ok(res.reason.includes('3/5'));
+  assert.ok(res.reason.includes('Happy Hour invites'));
+  assert.ok(res.reason.includes('Get **2** more new invites'));
+});
+
+test('Invite requirement: 5/5 invites is eligible', () => {
+  const res = checkClaimEligibility({
+    event: inviteEvent,
+    userId: 'user-1',
+    userHhInvites: 5
+  });
+  assert.strictEqual(res.eligible, true);
+});
+
+const boltsEvent = {
+  id: 'event-bolt-test',
+  tier: 'regular',
+  reqType: 'bolts',
+  discountedInvites: 5,
+  discountedBolts: 2000,
+  expired: false
+};
+
+test('BOLT requirement: unlinked panel account blocked', () => {
+  const res = checkClaimEligibility({
+    event: boltsEvent,
+    userId: 'user-2',
+    hasPanelAccount: false
+  });
+  assert.strictEqual(res.eligible, false);
+  assert.ok(res.reason.includes('Panel Account Not Linked'));
+  assert.ok(res.reason.includes('BOLTs'));
+});
+
+test('BOLT requirement: insufficient balance blocked with balance details', () => {
+  const res = checkClaimEligibility({
+    event: boltsEvent,
+    userId: 'user-2',
+    userBolts: 750,
+    hasPanelAccount: true
+  });
+  assert.strictEqual(res.eligible, false);
+  assert.strictEqual(res.current, 750);
+  assert.strictEqual(res.required, 2000);
+  assert.strictEqual(res.needed, 1250);
+  assert.ok(res.reason.includes('750'));
+  assert.ok(res.reason.includes('BOLTs'));
+  assert.ok(res.reason.includes('more BOLTs'));
+});
+
+test('BOLT requirement: sufficient balance is eligible', () => {
+  const res = checkClaimEligibility({
+    event: boltsEvent,
+    userId: 'user-2',
+    userBolts: 2500,
+    hasPanelAccount: true
+  });
+  assert.strictEqual(res.eligible, true);
+});
+
+const boosterTierEvent = {
+  id: 'event-booster-tier',
+  tier: 'booster',
+  reqType: 'invites',
+  discountedInvites: 4,
+  discountedBolts: 1000,
+  expired: false
+};
+
+test('Booster tier: non-booster blocked', () => {
+  const res = checkClaimEligibility({
+    event: boosterTierEvent,
+    userId: 'user-3',
+    isBoosting: false,
+    userHhInvites: 10
+  });
+  assert.strictEqual(res.eligible, false);
+  assert.ok(res.reason.includes('Booster Exclusive'));
+});
+
+test('Booster tier: active booster with enough invites is eligible', () => {
+  const res = checkClaimEligibility({
+    event: boosterTierEvent,
+    userId: 'user-3',
+    isBoosting: true,
+    userHhInvites: 4
+  });
+  assert.strictEqual(res.eligible, true);
+});
+
+// ── 8. Invite Delta & Snapshot Math ───────────────────────────────────────────
+console.log('\n--- Invite Delta & Tracking logic ---');
+
+test('Invite delta: user baseline of 10 invites does not count before HH', async () => {
+  const mockEvent = {
+    id: 'mock-event-hh',
+    inviteBaseline: {
+      timestamp: Date.now() - 60000,
+      codeUses: {
+        'CODE_OLD': 10
+      },
+      userTotals: {
+        'user_veteran': 10
+      }
+    },
+    trackedInvites: {}
+  };
+
+  const mockGuild = {
+    invites: {
+      async fetch() {
+        return new Map([
+          ['CODE_OLD', { code: 'CODE_OLD', uses: 12, inviter: { id: 'user_veteran' } }],
+          ['CODE_NEW', { code: 'CODE_NEW', uses: 3,  inviter: { id: 'user_veteran' } }]
+        ]);
+      }
+    }
+  };
+
+  const count = await inviteTracker.getUserHappyHourInvites(mockGuild, 'user_veteran', mockEvent);
+  // (12 - 10) + (3 - 0) = 2 + 3 = 5
+  assert.strictEqual(count, 5, `Expected 5 new invites, got ${count}`);
+});
+
+test('Invite delta: user with 0 new invites after event start gets 0', async () => {
+  const mockEvent = {
+    id: 'mock-event-hh-2',
+    inviteBaseline: {
+      timestamp: Date.now() - 60000,
+      codeUses: {
+        'CODE_OLD': 10
+      },
+      userTotals: {
+        'user_veteran': 10
+      }
+    },
+    trackedInvites: {}
+  };
+
+  const mockGuild = {
+    invites: {
+      async fetch() {
+        return new Map([
+          ['CODE_OLD', { code: 'CODE_OLD', uses: 10, inviter: { id: 'user_veteran' } }]
+        ]);
+      }
+    }
+  };
+
+  const count = await inviteTracker.getUserHappyHourInvites(mockGuild, 'user_veteran', mockEvent);
+  assert.strictEqual(count, 0, `Expected 0 new invites, got ${count}`);
+});
+
 // ── Summary ────────────────────────────────────────────────────────────────────
 console.log(`\n🎯 Results: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -108,6 +108,9 @@ module.exports = {
         claimedAt: ticket.claimedAt || new Date().toISOString()
       });
 
+      // Start 1-hour user inactivity countdown for staff reply
+      resolutionManager.onStaffReply(message.channel, message.author);
+
       // Post the takeover confirmation embed into the ticket channel
       if (wasAiHandling) {
         const transferBtn = new ButtonBuilder()
@@ -143,7 +146,7 @@ module.exports = {
     }
 
     // Clear any pending inactivity auto-close timer since the user is actively messaging
-    resolutionManager.clearTimers(message.channel.id);
+    resolutionManager.onUserMessage(message.channel, message.author);
 
     // 4. Check if User/Customer sent an explicit close request
     const trimmedQuery = (message.content || '').trim().toLowerCase().replace(/[.!?]/g, '');
@@ -436,6 +439,9 @@ module.exports = {
             lastSummary: aiResult.summary,
             continueWithAi: false
           });
+
+          // Schedule team reminder pings (1h) and unclaimed timeout (3h)
+          resolutionManager.onTeamHandoff(message.channel);
 
           const priorityEmoji = priority === 'purchase' ? '🛒' : (priority === 'red' ? '🔴' : (priority === 'yellow' ? '🟡' : '🟢'));
           const formattedNum = String(ticket.ticketNumber || 1).padStart(4, '0');

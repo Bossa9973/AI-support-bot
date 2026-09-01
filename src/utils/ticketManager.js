@@ -206,6 +206,10 @@ module.exports = {
     }
 
     db.closeTicket(channel.id);
+    try {
+      const resolutionManager = require('./resolutionManager');
+      resolutionManager.clearTimers(channel.id);
+    } catch (_) {}
 
     try {
       // 1. Lock user permissions in channel safely
@@ -326,6 +330,10 @@ module.exports = {
    */
   async deleteTicket(channel, deletedByUser) {
     db.deleteTicket(channel.id);
+    try {
+      const resolutionManager = require('./resolutionManager');
+      resolutionManager.clearTimers(channel.id);
+    } catch (_) {}
     await channel.send('⛔ *Deleting ticket channel in 5 seconds...*');
     setTimeout(async () => {
       await channel.delete(`Ticket deleted by ${deletedByUser.tag || deletedByUser.username || 'Staff'}`).catch(console.error);

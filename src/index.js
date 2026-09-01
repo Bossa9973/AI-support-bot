@@ -8,14 +8,21 @@ const { handleDM } = require('./handlers/dmHandler');
 const { getKnowledgeContext } = require('./ai/knowledgeBase');
 const { warmupConnection } = require('./ai/client');
 const { scheduleNextHappyHour } = require('./utils/happyHour');
+const {
+  cacheGuildInvites,
+  handleGuildMemberAdd,
+  handleInviteCreate,
+  handleInviteDelete
+} = require('./utils/inviteTracker');
 
-// Create Discord Client with required Intents including Direct Messages
+// Create Discord Client with required Intents including Direct Messages and Guild Invites
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites,
     GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Channel, Partials.Message, Partials.User]
@@ -87,11 +94,33 @@ client.once('clientReady', async () => {
   // Warm up the AI HTTP connection pool to avoid cold-start latency on the first ticket
   setTimeout(() => warmupConnection(), 2000);
 
+  // Pre-cache guild invites on startup
+  client.guilds.cache.forEach((g) => {
+    cacheGuildInvites(g).catch(() => {});
+  });
+
   // Start the Happy Hour scheduler (random 2–22h delay between events)
   if (config.happyHour.enabled && config.happyHour.channelId) {
     scheduleNextHappyHour(client);
     console.log(`[HappyHour] Scheduler started — channel: ${config.happyHour.channelId}`);
   }
+});
+
+// Invite & Member Events for Happy Hour Tracking
+client.on('guildMemberAdd', async (member) => {
+  try {
+    await handleGuildMemberAdd(member);
+  } catch (err) {
+    console.error('[InviteTracker] Error in guildMemberAdd:', err);
+  }
+});
+
+client.on('inviteCreate', (invite) => {
+  handleInviteCreate(invite);
+});
+
+client.on('inviteDelete', (invite) => {
+  handleInviteDelete(invite);
 });
 
 // Interaction Event (Slash Commands & Buttons)

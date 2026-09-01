@@ -22,6 +22,8 @@ const {
 const { randomUUID } = require('crypto');
 const config = require('../config');
 const db = require('../database/db');
+const inviteTracker = require('./inviteTracker');
+const panelApi = require('./panelApi');
 
 // ─── Plan catalogue ───────────────────────────────────────────────────────────
 
@@ -309,13 +311,13 @@ const TIER_META = {
 function buildRequirementLine(event) {
   const { reqType, discountedInvites, discountedBolts, plan } = event;
   if (reqType === 'invites') {
-    return `${HH_EMOJIS.inviteLink} **${discountedInvites} invites** *(normally ${plan.invites})*`;
+    return `${HH_EMOJIS.inviteLink} **${discountedInvites} new invites** *(tracked after event start • normally ${plan.invites})*`;
   }
   if (reqType === 'bolts') {
-    return `⚡ **${discountedBolts.toLocaleString()} BOLTs** *(normally ${plan.bolts.toLocaleString()})*`;
+    return `⚡ **${discountedBolts.toLocaleString()} BOLTs** *(current panel balance • normally ${plan.bolts.toLocaleString()})*`;
   }
   // invites_boost
-  return `${HH_EMOJIS.inviteLink} **${discountedInvites} invites** + ${HH_EMOJIS.rotiBoost} **1 Server Boost** *(normally ${plan.invites} invites)*`;
+  return `${HH_EMOJIS.inviteLink} **${discountedInvites} new invites** *(tracked after event start)* + ${HH_EMOJIS.rotiBoost} **1 Server Boost** *(normally ${plan.invites} invites)*`;
 }
 
 /**
@@ -398,7 +400,6 @@ async function startHappyHour(client, forcedEvent = null) {
   }
 
   const event = forcedEvent || buildHappyHourEvent();
-  db.setHappyHourEvent(event);
 
   try {
     const channel = await client.channels.fetch(cfg.channelId).catch(() => null);
@@ -408,6 +409,15 @@ async function startHappyHour(client, forcedEvent = null) {
       scheduleNextHappyHour(client);
       return;
     }
+
+    // Snapshot guild invites milliseconds before happy hour announcement is posted
+    const guild = channel.guild || (config.guildId ? await client.guilds.fetch(config.guildId).catch(() => null) : null) || client.guilds?.cache?.first?.();
+    if (guild) {
+      event.inviteBaseline = await inviteTracker.snapshotGuildInvites(guild);
+      console.log(`[HappyHour] 📸 Guild invite snapshot captured for guild: ${guild.name || guild.id}`);
+    }
+
+    db.setHappyHourEvent(event);
 
     const embed = buildAnnounceEmbed(event);
     const row   = buildClaimRow(event);
@@ -566,6 +576,96 @@ function cancelScheduledHappyHour(client) {
 }
 
 /**
+ * Check whether a user meets the requirements to claim a Happy Hour event.
+ * @param {object} params
+ * @param {object} params.event
+ * @param {string} params.userId
+ * @param {boolean} [params.isBoosting=false]
+ * @param {number} [params.userHhInvites=0]
+ * @param {number} [params.userBolts=0]
+ * @param {boolean} [params.hasPanelAccount=true]
+ * @returns {{ eligible: boolean, reason?: string, current?: number, required?: number, needed?: number }}
+ */
+function checkClaimEligibility({ event, userId, isBoosting = false, userHhInvites = 0, userBolts = 0, hasPanelAccount = true }) {
+  if (!event || event.expired) {
+    return { eligible: false, reason: 'This Happy Hour has already ended.' };
+  }
+
+  // 1. Booster tier check
+  if (event.tier === 'booster' && !isBoosting) {
+    return {
+      eligible: false,
+      reason: `${HH_EMOJIS.rotiBoost} This Happy Hour is **Booster Exclusive**. You need to be actively boosting this server to claim it!`
+    };
+  }
+
+  // 2. Invites / Invites + Boost check
+  if (event.reqType === 'invites' || event.reqType === 'invites_boost') {
+    if (event.reqType === 'invites_boost' && !isBoosting) {
+      return {
+        eligible: false,
+        reason: `${HH_EMOJIS.nitroBoost} This Happy Hour requires an **Active Server Boost** + **${event.discountedInvites} Happy Hour invites**.\nYou need to be actively boosting this server to claim!`
+      };
+    }
+
+    const reqInvites = event.discountedInvites;
+    if (userHhInvites < reqInvites) {
+      const needed = reqInvites - userHhInvites;
+      return {
+        eligible: false,
+        current: userHhInvites,
+        required: reqInvites,
+        needed,
+        reason: [
+          `❌ **Claim Requirement Not Met**`,
+          ``,
+          `You currently have **${userHhInvites}/${reqInvites}** Happy Hour invites${event.reqType === 'invites_boost' ? ' (plus active Server Boost)' : ''}.`,
+          ``,
+          `ℹ️ **Stats are tracked after this Happy Hour started.**`,
+          `Get **${needed}** more new invite${needed === 1 ? '' : 's'} and be the first to claim!`
+        ].join('\n')
+      };
+    }
+  }
+
+  // 3. BOLTs balance check (current live balance)
+  if (event.reqType === 'bolts') {
+    const reqBolts = event.discountedBolts;
+    if (!hasPanelAccount) {
+      return {
+        eligible: false,
+        reason: [
+          `❌ **Panel Account Not Linked**`,
+          ``,
+          `You need a linked Vertex Panel account with **${reqBolts.toLocaleString()} BOLTs** to claim this Happy Hour!`,
+          `Please log in to the panel and link your Discord account in Account Settings.`
+        ].join('\n')
+      };
+    }
+
+    if (userBolts < reqBolts) {
+      const needed = (reqBolts - userBolts).toLocaleString();
+      return {
+        eligible: false,
+        current: userBolts,
+        required: reqBolts,
+        needed: reqBolts - userBolts,
+        reason: [
+          `❌ **Insufficient BOLTs**`,
+          ``,
+          `You need **${reqBolts.toLocaleString()} BOLTs** to claim this Happy Hour slot.`,
+          ``,
+          `⚡ **Your Balance:** ${userBolts.toLocaleString()} / ${reqBolts.toLocaleString()} BOLTs`,
+          `You need **${needed}** more BOLTs to claim! Top up or earn more BOLTs on the dashboard.`
+        ].join('\n')
+      };
+    }
+  }
+
+  return { eligible: true };
+}
+
+/**
  * Handle a user clicking the Claim Now button.
  * Called by buttonHandler. Returns { ok, reason, event, claimed, total }.
  *
@@ -582,15 +682,41 @@ async function handleClaim(interaction, eventId) {
     return interaction.reply({ content: '⏰ This Happy Hour has already ended!', flags: MessageFlags.Ephemeral });
   }
 
-  // Booster check
-  if (event.tier === 'booster') {
-    const isBoosting = member?.premiumSince || member?.premiumSinceTimestamp;
-    if (!isBoosting) {
-      return interaction.reply({
-        content: `${HH_EMOJIS.rotiBoost} This Happy Hour is **Booster Exclusive**. You need to be actively boosting this server to claim it!`,
-        flags: MessageFlags.Ephemeral
-      });
+  const isBoosting = !!(member?.premiumSince || member?.premiumSinceTimestamp);
+
+  // Gather stats based on requirement type
+  let userHhInvites = 0;
+  let userBolts = 0;
+  let hasPanelAccount = true;
+
+  if (event.reqType === 'invites' || event.reqType === 'invites_boost') {
+    userHhInvites = await inviteTracker.getUserHappyHourInvites(guild, user.id, event);
+  }
+
+  if (event.reqType === 'bolts') {
+    const panelData = await panelApi.getPanelContext(user.id);
+    if (!panelData || !panelData.user) {
+      hasPanelAccount = false;
+    } else {
+      userBolts = parseFloat(panelData.user.credits ?? panelData.user.bolts ?? 0) || 0;
     }
+  }
+
+  // Check eligibility
+  const eligibility = checkClaimEligibility({
+    event,
+    userId: user.id,
+    isBoosting,
+    userHhInvites,
+    userBolts,
+    hasPanelAccount
+  });
+
+  if (!eligibility.eligible) {
+    return interaction.reply({
+      content: eligibility.reason,
+      flags: MessageFlags.Ephemeral
+    });
   }
 
   // Try to reserve a slot
@@ -713,6 +839,7 @@ module.exports = {
   cancelScheduledHappyHour,
   handleClaim,
   cancelHappyHour,
+  checkClaimEligibility,
   // Exposed for tests
   rollEventType,
   rollDiscount,

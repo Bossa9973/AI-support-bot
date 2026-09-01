@@ -189,6 +189,7 @@ module.exports = {
 
       db.claimTicket(channel.id, user.id);
       db.updateTicket(channel.id, { continueWithAi: false });
+      resolutionManager.onTicketClaimed(channel, user);
 
       const transferBtn = new ButtonBuilder()
         .setCustomId('ticket_transfer')
@@ -238,6 +239,7 @@ module.exports = {
 
       const prevClaimed = ticketData.claimedBy;
       db.unclaimTicket(channel.id);
+      resolutionManager.onTeamHandoff(channel);
 
       const claimBtn = new ButtonBuilder()
         .setCustomId('ticket_claim')
