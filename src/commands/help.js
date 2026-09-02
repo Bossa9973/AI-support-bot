@@ -16,8 +16,9 @@ module.exports = {
       .addFields([
         {
           name: '🎫 Ticket Management Commands',
-          value: [
             '• `/panel` — Deploy the interactive support ticket embed (Admins only)',
+            '• `/backup` — ⚡ Broad cloud backups across nodes (Paid/Free/All)',
+            '• `/backup-vm <@user>` — 📦 Select and backup specific VMs of a tagged user',
             '• `/close` — Close, lock, and archive the current ticket with full HTML transcript',
             '• `/add <@user>` — Grant another user or staff member access to this ticket',
             '• `/remove <@user>` — Revoke a user\'s access from this ticket',
