@@ -94,7 +94,7 @@ class PanelBridge {
       args.push(`--name=${options.name}`);
     }
 
-    return this.runArtisan(args, 180000); // 3-minute timeout for multi-VM backup
+    return this.runArtisan(args, 600000); // 10-minute timeout for multi-VM backup
   }
 
   /**
@@ -113,14 +113,14 @@ class PanelBridge {
       args.push('--sync');
     }
 
-    return this.runArtisan(args, 300000); // 5-minute timeout for bulk operations
+    return this.runArtisan(args, 900000); // 15-minute timeout for bulk operations
   }
 
   /**
    * Trigger immediate cloud upload of all pending backups.
    */
   async uploadPendingBackups() {
-    return this.runArtisan(['server:upload-pending-backups', '--sync'], 300000);
+    return this.runArtisan(['server:upload-pending-backups', '--sync'], 900000);
   }
 }
 
