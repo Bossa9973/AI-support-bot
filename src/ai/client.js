@@ -60,12 +60,29 @@ async function createChatCompletion(params, options = {}) {
 
       // ─── 1. HANDLE 402 INSUFFICIENT CREDITS / MAX_TOKENS LIMIT ────────────────
       if (status === 402 || errMsg.includes('402') || errMsg.includes('requires more credits') || errMsg.includes('fewer max_tokens')) {
+        const fallbackModel = config.ai.fallbackModel || 'openrouter/free';
         const affordMatch = errMsg.match(/can only afford (\d+)/i) || errMsg.match(/afford up to (\d+)/i);
         if (affordMatch) {
           const rawAffordable = parseInt(affordMatch[1], 10);
+          // If affordable tokens are too small for a usable response (< 150), fall back to free model immediately
+          if (rawAffordable < 150 && requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
+            console.warn(`[${context}] ⚠️ OpenRouter credit only affords ${rawAffordable} tokens (< 150 min). Automatically falling back to free model (${fallbackModel})...`);
+            requestParams.model = fallbackModel;
+            requestParams.max_tokens = Math.max(300, params.max_tokens || 350);
+            attempt = 1;
+            continue;
+          }
+
           const safeAffordable = Math.max(40, rawAffordable - 10);
           if (safeAffordable >= requestParams.max_tokens) {
-            // Already at or below the affordable floor — further retries won't help.
+            // Already at or below the affordable floor — switch to fallback
+            if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
+              console.warn(`[${context}] ⚠️ OpenRouter credit limit reached. Automatically falling back to free model (${fallbackModel})...`);
+              requestParams.model = fallbackModel;
+              requestParams.max_tokens = 300;
+              attempt = 1;
+              continue;
+            }
             console.warn(`[${context}] ⚠️ OpenRouter credit limit reached and max_tokens (${requestParams.max_tokens}) cannot be reduced further. Giving up.`);
             throw err;
           }
@@ -75,7 +92,6 @@ async function createChatCompletion(params, options = {}) {
         }
 
         // If credits are 0 or cannot afford on paid model, switch to free fallback model
-        const fallbackModel = config.ai.fallbackModel || 'openrouter/free';
         if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
           console.warn(`[${context}] ⚠️ OpenRouter paid model credit low. Automatically falling back to efficient model (${fallbackModel}) with max_tokens: 300...`);
           requestParams.model = fallbackModel;
@@ -97,6 +113,7 @@ async function createChatCompletion(params, options = {}) {
           console.warn(`[${context}] ⚠️ Model '${requestParams.model}' has reached end of life (410). Switching to fallback: ${eolFallback}`);
           requestParams.model = eolFallback;
           requestParams.max_tokens = Math.min(requestParams.max_tokens || 400, 400);
+          attempt = 1;
           continue;
         }
         // Fallback itself is also EOL — throw so the caller surfaces a proper error
@@ -111,6 +128,7 @@ async function createChatCompletion(params, options = {}) {
           console.warn(`[${context}] ⚠️ OpenRouter model redirected: switching to suggested slug (${suggestedSlug}) with max_tokens: 350...`);
           requestParams.model = suggestedSlug;
           requestParams.max_tokens = Math.min(requestParams.max_tokens || 350, 350);
+          attempt = Math.max(0, attempt - 1);
           continue;
         }
 
