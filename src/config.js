@@ -20,6 +20,13 @@ const openRouterConfig = {
   siteName: process.env.OPENROUTER_SITE_NAME || 'Discord AI Support'
 };
 
+const groqConfig = {
+  enabled: parseBool(process.env.GROQ_ENABLED, false),
+  apiKey: process.env.GROQ_API_KEY || '',
+  model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
+  baseURL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'
+};
+
 const nvidiaConfig = {
   enabled: parseBool(process.env.NVIDIA_ENABLED, false),
   apiKey: process.env.NVIDIA_API_KEY || '',
@@ -31,13 +38,17 @@ const nvidiaConfig = {
 let selectedProvider = 'openrouter';
 
 const explicitProvider = (process.env.AI_PROVIDER || '').trim().toLowerCase();
-if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
+if (explicitProvider === 'groq') {
+  selectedProvider = 'groq';
+} else if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
   selectedProvider = 'nvidia';
 } else if (explicitProvider === 'openrouter') {
   selectedProvider = 'openrouter';
 } else {
-  // Check toggle switches (e.g., OPENROUTER_ENABLED=0, NVIDIA_ENABLED=1)
-  if (nvidiaConfig.enabled && !openRouterConfig.enabled) {
+  // Check toggle switches
+  if (groqConfig.enabled || (groqConfig.apiKey && !openRouterConfig.apiKey && !nvidiaConfig.apiKey)) {
+    selectedProvider = 'groq';
+  } else if (nvidiaConfig.enabled && !openRouterConfig.enabled) {
     selectedProvider = 'nvidia';
   } else if (openRouterConfig.enabled && !nvidiaConfig.enabled) {
     selectedProvider = 'openrouter';
@@ -49,34 +60,48 @@ if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
 }
 
 const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '350', 10);
-const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter'
-  ? 'openrouter/free'
-  : 'nvidia/nemotron-3.5-lightning-30b-a3b');
+const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'groq'
+  ? 'groq/compound'
+  : (selectedProvider === 'openrouter' ? 'openrouter/free' : 'nvidia/nemotron-3.5-lightning-30b-a3b'));
 
-const activeAIConfig = selectedProvider === 'nvidia'
-  ? {
-      provider: 'nvidia',
-      providerName: 'NVIDIA NIM',
-      apiKey: nvidiaConfig.apiKey,
-      model: nvidiaConfig.model,
-      baseURL: nvidiaConfig.baseURL,
-      maxTokens,
-      fallbackModel,
-      defaultHeaders: {}
+let activeAIConfig;
+if (selectedProvider === 'groq') {
+  activeAIConfig = {
+    provider: 'groq',
+    providerName: 'Groq',
+    apiKey: groqConfig.apiKey,
+    model: groqConfig.model,
+    baseURL: groqConfig.baseURL,
+    maxTokens,
+    fallbackModel,
+    defaultHeaders: {}
+  };
+} else if (selectedProvider === 'nvidia') {
+  activeAIConfig = {
+    provider: 'nvidia',
+    providerName: 'NVIDIA NIM',
+    apiKey: nvidiaConfig.apiKey,
+    model: nvidiaConfig.model,
+    baseURL: nvidiaConfig.baseURL,
+    maxTokens,
+    fallbackModel,
+    defaultHeaders: {}
+  };
+} else {
+  activeAIConfig = {
+    provider: 'openrouter',
+    providerName: 'OpenRouter',
+    apiKey: openRouterConfig.apiKey,
+    model: openRouterConfig.model,
+    baseURL: openRouterConfig.baseURL,
+    maxTokens,
+    fallbackModel,
+    defaultHeaders: {
+      'HTTP-Referer': openRouterConfig.siteUrl,
+      'X-Title': openRouterConfig.siteName
     }
-  : {
-      provider: 'openrouter',
-      providerName: 'OpenRouter',
-      apiKey: openRouterConfig.apiKey,
-      model: openRouterConfig.model,
-      baseURL: openRouterConfig.baseURL,
-      maxTokens,
-      fallbackModel,
-      defaultHeaders: {
-        'HTTP-Referer': openRouterConfig.siteUrl,
-        'X-Title': openRouterConfig.siteName
-      }
-    };
+  };
+}
 
 module.exports = {
   // Discord Config
@@ -104,6 +129,7 @@ module.exports = {
     raw: openRouterConfig
   },
   nvidia: nvidiaConfig,
+  groq: groqConfig,
 
   // Ticket Settings
   tickets: {
