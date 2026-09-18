@@ -14,7 +14,7 @@ function parseBool(val, defaultVal = false) {
 const openRouterConfig = {
   enabled: parseBool(process.env.OPENROUTER_ENABLED, true),
   apiKey: process.env.OPENROUTER_API_KEY || '',
-  model: process.env.OPENROUTER_MODEL || 'stealth/ox-alpha',
+  model: process.env.OPENROUTER_MODEL || 'minimax/minimax-m3:free',
   baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
   siteUrl: process.env.OPENROUTER_SITE_URL || 'https://discord.gg',
   siteName: process.env.OPENROUTER_SITE_NAME || 'Discord AI Support'
@@ -50,7 +50,7 @@ if (explicitProvider === 'nvidia' || explicitProvider === 'nim') {
 
 const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '350', 10);
 const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'openrouter'
-  ? 'poolside/laguna-s-2.1:free'
+  ? 'openrouter/free'
   : 'nvidia/nemotron-3.5-lightning-30b-a3b');
 
 const activeAIConfig = selectedProvider === 'nvidia'

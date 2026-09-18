@@ -64,25 +64,35 @@ async function createChatCompletion(params, options = {}) {
         if (affordMatch) {
           const rawAffordable = parseInt(affordMatch[1], 10);
           const safeAffordable = Math.max(40, rawAffordable - 10);
+          if (safeAffordable >= requestParams.max_tokens) {
+            // Already at or below the affordable floor — further retries won't help.
+            console.warn(`[${context}] ⚠️ OpenRouter credit limit reached and max_tokens (${requestParams.max_tokens}) cannot be reduced further. Giving up.`);
+            throw err;
+          }
           console.warn(`[${context}] ⚠️ OpenRouter credit limit reached. Auto-adjusting max_tokens from ${requestParams.max_tokens} down to ${safeAffordable} and retrying...`);
           requestParams.max_tokens = safeAffordable;
           continue;
         }
 
         // If credits are 0 or cannot afford on paid model, switch to free fallback model
-        const fallbackModel = config.ai.fallbackModel || 'poolside/laguna-s-2.1:free';
+        const fallbackModel = config.ai.fallbackModel || 'openrouter/free';
         if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
           console.warn(`[${context}] ⚠️ OpenRouter paid model credit low. Automatically falling back to efficient model (${fallbackModel}) with max_tokens: 300...`);
           requestParams.model = fallbackModel;
           requestParams.max_tokens = 300;
+          attempt = 1;
           continue;
         }
+
+        // Fallback model is also out of credits — nothing more we can do.
+        console.error(`[${context}] ⚠️ OpenRouter credit exhausted on all models. Giving up.`);
+        throw err;
       }
 
       // ─── 2. HANDLE 410 MODEL END-OF-LIFE (EOL / Gone) ────────────────────────
       if (status === 410 || errMsg.includes('410') || errMsg.includes('end of life') || errMsg.includes('no longer available')) {
         const eolFallback = config.ai.fallbackModel ||
-          (config.ai.provider === 'nvidia' ? 'nvidia/nemotron-3.5-lightning-30b-a3b' : 'poolside/laguna-s-2.1:free');
+          (config.ai.provider === 'nvidia' ? 'nvidia/nemotron-3.5-lightning-30b-a3b' : 'openrouter/free');
         if (requestParams.model !== eolFallback) {
           console.warn(`[${context}] ⚠️ Model '${requestParams.model}' has reached end of life (410). Switching to fallback: ${eolFallback}`);
           requestParams.model = eolFallback;
@@ -114,11 +124,12 @@ async function createChatCompletion(params, options = {}) {
         }
 
         // Fallback to configured fallback model
-        const notFoundFallback = config.ai.fallbackModel || 'poolside/laguna-s-2.1:free';
+        const notFoundFallback = config.ai.fallbackModel || 'openrouter/free';
         if (requestParams.model !== notFoundFallback) {
           console.warn(`[${context}] ⚠️ Model unavailable (404). Falling back to ${notFoundFallback}...`);
           requestParams.model = notFoundFallback;
           requestParams.max_tokens = Math.min(requestParams.max_tokens || 350, 350);
+          attempt = 1;
           continue;
         }
       }
@@ -144,7 +155,7 @@ async function createChatCompletion(params, options = {}) {
         }
 
         // If all retries on the current model are exhausted, try fallback model
-        const fallbackModel = config.ai.fallbackModel || 'minimax/minimax-m3:free';
+        const fallbackModel = config.ai.fallbackModel || 'openrouter/free';
         if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
           console.warn(`[${context}] ⚠️ Rate limits or provider errors exhausted on ${requestParams.model}. Automatically falling back to ${fallbackModel}...`);
           requestParams.model = fallbackModel;
@@ -157,6 +168,10 @@ async function createChatCompletion(params, options = {}) {
       throw err;
     }
   }
+
+  // Safety net: should never be reached, but prevents the function from
+  // returning undefined if all loop iterations exit via `continue`.
+  throw new Error(`[${context}] AI request exhausted all ${maxAttempts} attempts without a response.`);
 }
 
 /**
