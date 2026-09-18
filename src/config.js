@@ -14,7 +14,7 @@ function parseBool(val, defaultVal = false) {
 const openRouterConfig = {
   enabled: parseBool(process.env.OPENROUTER_ENABLED, true),
   apiKey: process.env.OPENROUTER_API_KEY || '',
-  model: process.env.OPENROUTER_MODEL || 'minimax/minimax-m3:free',
+  model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',
   baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
   siteUrl: process.env.OPENROUTER_SITE_URL || 'https://discord.gg',
   siteName: process.env.OPENROUTER_SITE_NAME || 'Discord AI Support'
