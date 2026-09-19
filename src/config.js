@@ -30,7 +30,7 @@ const groqConfig = {
 const nvidiaConfig = {
   enabled: parseBool(process.env.NVIDIA_ENABLED, false),
   apiKey: process.env.NVIDIA_API_KEY || '',
-  model: process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct',
+  model: process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
   baseURL: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1'
 };
 
