@@ -2,15 +2,19 @@ const assert = require('assert');
 
 function runTest(name, envSetup, expectedProvider, expectedModel, expectedBaseUrl) {
   // Clear env and cached modules
-  process.env.AI_PROVIDER = envSetup.AI_PROVIDER || '';
-  delete process.env.OPENROUTER_ENABLED;
-  delete process.env.NVIDIA_ENABLED;
-  delete process.env.OPENROUTER_API_KEY;
-  delete process.env.NVIDIA_API_KEY;
-  delete process.env.OPENROUTER_MODEL;
-  delete process.env.NVIDIA_MODEL;
-  delete process.env.OPENROUTER_BASE_URL;
-  delete process.env.NVIDIA_BASE_URL;
+  process.env.AI_PROVIDER = envSetup.AI_PROVIDER !== undefined ? envSetup.AI_PROVIDER : '';
+  process.env.OPENROUTER_ENABLED = envSetup.OPENROUTER_ENABLED !== undefined ? envSetup.OPENROUTER_ENABLED : '0';
+  process.env.NVIDIA_ENABLED = envSetup.NVIDIA_ENABLED !== undefined ? envSetup.NVIDIA_ENABLED : '0';
+  process.env.GROQ_ENABLED = envSetup.GROQ_ENABLED !== undefined ? envSetup.GROQ_ENABLED : '0';
+  process.env.OPENROUTER_API_KEY = envSetup.OPENROUTER_API_KEY !== undefined ? envSetup.OPENROUTER_API_KEY : '';
+  process.env.NVIDIA_API_KEY = envSetup.NVIDIA_API_KEY !== undefined ? envSetup.NVIDIA_API_KEY : '';
+  process.env.GROQ_API_KEY = envSetup.GROQ_API_KEY !== undefined ? envSetup.GROQ_API_KEY : '';
+  process.env.OPENROUTER_MODEL = envSetup.OPENROUTER_MODEL !== undefined ? envSetup.OPENROUTER_MODEL : '';
+  process.env.NVIDIA_MODEL = envSetup.NVIDIA_MODEL !== undefined ? envSetup.NVIDIA_MODEL : '';
+  process.env.GROQ_MODEL = envSetup.GROQ_MODEL !== undefined ? envSetup.GROQ_MODEL : '';
+  process.env.OPENROUTER_BASE_URL = envSetup.OPENROUTER_BASE_URL !== undefined ? envSetup.OPENROUTER_BASE_URL : '';
+  process.env.NVIDIA_BASE_URL = envSetup.NVIDIA_BASE_URL !== undefined ? envSetup.NVIDIA_BASE_URL : '';
+  process.env.GROQ_BASE_URL = envSetup.GROQ_BASE_URL !== undefined ? envSetup.GROQ_BASE_URL : '';
 
   Object.assign(process.env, envSetup);
 

@@ -598,9 +598,7 @@ async function generateSupportResponse(conversationHistory, userQuery, username 
     userQuery
   ].join(' ');
 
-  const knowledgeBaseText = escalated
-    ? getKnowledgeContext()
-    : getFocusedKnowledgeContext(combinedContextText, 5, category);
+  const knowledgeBaseText = getFocusedKnowledgeContext(combinedContextText, 4, category);
 
   // ─── POST-ESCALATION / HOLDING MODE ──────────────────────────────────────────
   if (escalated) {
@@ -630,10 +628,14 @@ User: @${username}`;
 
     const messages = [{ role: 'system', content: holdingSystemPrompt }];
     if (Array.isArray(conversationHistory)) {
-      for (const msg of conversationHistory.slice(-24)) {
+      for (const msg of conversationHistory.slice(-10)) {
+        let content = msg.content || '';
+        if (typeof content === 'string' && content.length > 1500) {
+          content = content.slice(0, 1500) + '\n...[truncated]';
+        }
         messages.push({
           role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
+          content
         });
       }
     }
@@ -693,10 +695,14 @@ User: @${username}`;
   const messages = [{ role: 'system', content: systemPrompt }];
 
   if (Array.isArray(conversationHistory)) {
-    for (const msg of conversationHistory.slice(-24)) {
+    for (const msg of conversationHistory.slice(-10)) {
+      let content = msg.content || '';
+      if (typeof content === 'string' && content.length > 1500) {
+        content = content.slice(0, 1500) + '\n...[truncated]';
+      }
       messages.push({
         role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
+        content
       });
     }
   }

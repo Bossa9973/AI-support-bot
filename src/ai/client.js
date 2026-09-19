@@ -152,6 +152,34 @@ async function createChatCompletion(params, options = {}) {
         }
       }
 
+      // ─── 3b. HANDLE 413 REQUEST TOO LARGE / ITPM TOKEN LIMIT ─────────────────
+      if (status === 413 || errMsg.includes('413') || errMsg.includes('Request too large') || errMsg.includes('ITPM') || errMsg.includes('reduce your message size')) {
+        const fallback = config.ai.fallbackModel || (config.ai.provider === 'groq' ? 'llama-3.1-8b-instant' : 'openrouter/free');
+
+        // First attempt: aggressively trim messages history
+        if (Array.isArray(requestParams.messages) && requestParams.messages.length > 2) {
+          console.warn(`[${context}] ⚠️ Request too large (413 / ITPM limit on ${requestParams.model}). Trimming history to recent turns and retrying...`);
+          const sysMsg = requestParams.messages[0];
+          const userLastMsg = requestParams.messages[requestParams.messages.length - 1];
+          const middle = requestParams.messages.slice(1, -1);
+          const trimmedMiddle = middle.slice(-2);
+          requestParams.messages = [sysMsg, ...trimmedMiddle, userLastMsg];
+          attempt = Math.max(1, attempt - 1);
+          continue;
+        }
+
+        // If history is already minimal or trimming didn't suffice, switch to high-capacity fallback model
+        if (requestParams.model !== fallback) {
+          console.warn(`[${context}] ⚠️ Token limit exceeded for ${requestParams.model}. Automatically falling back to ${fallback}...`);
+          requestParams.model = fallback;
+          requestParams.max_tokens = Math.min(requestParams.max_tokens || 350, 350);
+          attempt = 1;
+          continue;
+        }
+
+        throw err;
+      }
+
       // ─── 4. HANDLE 429 / 529 / 503 / 502 RATE LIMITS & OVERLOADS ──────────────
       const isRetryable =
         status === 429 ||
@@ -173,8 +201,8 @@ async function createChatCompletion(params, options = {}) {
         }
 
         // If all retries on the current model are exhausted, try fallback model
-        const fallbackModel = config.ai.fallbackModel || 'openrouter/free';
-        if (requestParams.model !== fallbackModel && config.ai.provider === 'openrouter') {
+        const fallbackModel = config.ai.fallbackModel || (config.ai.provider === 'groq' ? 'llama-3.1-8b-instant' : 'openrouter/free');
+        if (requestParams.model !== fallbackModel) {
           console.warn(`[${context}] ⚠️ Rate limits or provider errors exhausted on ${requestParams.model}. Automatically falling back to ${fallbackModel}...`);
           requestParams.model = fallbackModel;
           requestParams.max_tokens = Math.min(requestParams.max_tokens || 300, 300);

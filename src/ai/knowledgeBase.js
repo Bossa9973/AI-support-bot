@@ -195,7 +195,7 @@ function getFocusedKnowledgeContext(query = '', maxArticles = 5, ticketCategory 
     context += `--- RELEVANT KNOWLEDGE ARTICLES ---\n`;
     for (const { cat, art, content } of selected) {
       const trimmed = content.trim();
-      const snippet = trimmed.length > 4000 ? trimmed.slice(0, 4000) + '\n...' : trimmed;
+      const snippet = trimmed.length > 1500 ? trimmed.slice(0, 1500) + '\n...' : trimmed;
       context += `\n[CATEGORY: ${cat.toUpperCase()}] ${art.title}\n${snippet}\n`;
     }
     context += `--- END ARTICLES ---\n\n`;
