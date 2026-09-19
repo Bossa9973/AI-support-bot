@@ -239,8 +239,8 @@ module.exports = {
         let inlineText = '';
         for (const [, attachment] of message.attachments) {
           const ct = (attachment.contentType || '').toLowerCase();
-          const name = (attachment.name || '').toLowerCase();
-          if (ct.startsWith('image/')) {
+          const isImage = ct.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(name);
+          if (isImage) {
             imageUrls.push(attachment.url);
           } else if (
             ct.startsWith('text/') ||

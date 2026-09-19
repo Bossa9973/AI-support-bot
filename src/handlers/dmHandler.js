@@ -3,7 +3,7 @@ const config = require('../config');
 const knowledgeManager = require('../ai/knowledgeManager');
 const { answerSuggestionQuestion } = require('../ai/selfLearning');
 const db = require('../database/db');
-const { getClient, withRetry, createChatCompletion } = require('../ai/client');
+const { getClient, withRetry, createChatCompletion, buildUserContent } = require('../ai/client');
 
 /**
  * Formats recent Discord channel messages into an OpenAI-compatible messages array,
@@ -81,7 +81,7 @@ function extractConversationHistory(fetchedMessages, botUserId) {
  * AI Tool Agent that translates the Boss's conversational requests into actions
  * with complete context awareness of knowledge catalog, gaps, drafts, and past embeds.
  */
-async function processBossCommand(conversationHistory, userText, username) {
+async function processBossCommand(conversationHistory, userText, username, imageUrls = []) {
   const client = getClient();
   const currentLessons = knowledgeManager.getLessons();
   const currentArticles = knowledgeManager.listArticles();
@@ -225,11 +225,7 @@ Always place your final JSON object inside \`\`\`json ... \`\`\` at the end of y
     ...conversationHistory
   ];
 
-  // If latest user message not already at the end of history, append it
-  const lastMsg = messages[messages.length - 1];
-  if (!lastMsg || lastMsg.role !== 'user' || !lastMsg.content.includes(userText.trim())) {
-    messages.push({ role: 'user', content: userText });
-  }
+  messages.push({ role: 'user', content: buildUserContent(userText, imageUrls) });
 
   try {
     const response = await createChatCompletion({
@@ -340,7 +336,41 @@ module.exports = {
       message?.channel?.sendTyping?.().catch(() => { });
     } catch (_) { }
 
-    const content = message.content.trim();
+    const rawContent = message.content || '';
+    const content = rawContent.trim();
+
+    // Check attachments
+    const imageUrls = [];
+    let inlineText = '';
+    if (message.attachments && message.attachments.size > 0) {
+      for (const [, attachment] of message.attachments) {
+        const ct = (attachment.contentType || '').toLowerCase();
+        const name = (attachment.name || '').toLowerCase();
+        const isImage = ct.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(name);
+        if (isImage) {
+          imageUrls.push(attachment.url);
+        } else if (
+          ct.startsWith('text/') ||
+          name.endsWith('.txt') || name.endsWith('.log') ||
+          name.endsWith('.json') || name.endsWith('.yaml') ||
+          name.endsWith('.yml') || name.endsWith('.conf') ||
+          name.endsWith('.sh') || name.endsWith('.py') ||
+          name.endsWith('.js') || name.endsWith('.md')
+        ) {
+          try {
+            const res = await fetch(attachment.url);
+            const text = await res.text();
+            const trimmed = text.slice(0, 2000);
+            inlineText += `\n\n[Attached file: ${attachment.name}]\n\`\`\`\n${trimmed}${text.length > 2000 ? '\n... (truncated)' : ''}\n\`\`\``;
+          } catch (fetchErr) {
+            console.error('[dmHandler] Failed to fetch text attachment:', fetchErr.message);
+          }
+        }
+      }
+    }
+
+    // Ignore empty messages with no content or attachments
+    if (!content && imageUrls.length === 0 && !inlineText) return;
 
     // 2. Direct Shortcuts / Fast Commands
     // 2a. List pending drafts
@@ -515,7 +545,8 @@ module.exports = {
     }
 
     // 4. Process Natural Language Command with AI
-    const result = await processBossCommand(history, content, message.author.username);
+    const userPrompt = (content || (imageUrls.length > 0 ? 'Describe what you see in the attached image and assist me with it.' : '')) + inlineText;
+    const result = await processBossCommand(history, userPrompt, message.author.username, imageUrls);
 
     // 5. Execute Action
     // 5a. PROPOSE_DRAFT (Interactive Preview with Accept / Decline Buttons)
