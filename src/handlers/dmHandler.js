@@ -25,12 +25,17 @@ function extractConversationHistory(fetchedMessages, botUserId) {
 
     if (msg.embeds && msg.embeds.length > 0) {
       for (const emb of msg.embeds) {
+        if (emb.title && emb.title.includes('Knowledge Base Catalog')) continue;
         const embLines = [];
         if (emb.title) embLines.push(`[EMBED TITLE]: ${emb.title}`);
-        if (emb.description) embLines.push(`[EMBED DESCRIPTION]: ${emb.description}`);
+        if (emb.description) {
+          const desc = emb.description.length > 300 ? emb.description.slice(0, 300) + '...' : emb.description;
+          embLines.push(`[EMBED DESCRIPTION]: ${desc}`);
+        }
         if (emb.fields && emb.fields.length > 0) {
           for (const f of emb.fields) {
-            embLines.push(`[FIELD ${f.name}]: ${f.value}`);
+            const val = f.value && f.value.length > 200 ? f.value.slice(0, 200) + '...' : f.value;
+            embLines.push(`[FIELD ${f.name}]: ${val}`);
           }
         }
         if (emb.footer && emb.footer.text) {
@@ -92,35 +97,37 @@ async function processBossCommand(conversationHistory, userText, username) {
     };
   }
 
-  // Build detailed articles catalog
+  // Build concise articles catalog (category: slug1, slug2)
   const articlesCatalog = Object.entries(currentArticles).map(([cat, list]) => {
-    const items = list.map(a => `  • [${cat}/${a.slug}] "${a.title}"`).join('\n');
-    return `📁 Category: ${cat} (${list.length} articles)\n${items}`;
-  }).join('\n\n') || 'No articles found.';
+    return `📁 ${cat}: ${list.map(a => a.slug).join(', ')}`;
+  }).join('\n') || 'No articles found.';
 
   // Build pending gaps section
   let pendingGapsSection = 'No pending knowledge gaps.';
   if (pendingQuestions.length > 0) {
-    pendingGapsSection = pendingQuestions.map(q =>
-      `• [ID: ${q.id}] Topic: "${q.topic}" | Ticket: #${q.ticketNumber || 'Live'} | User Asked: "${q.userQuery || ''}" | Question: "${q.question}"`
+    pendingGapsSection = pendingQuestions.slice(-5).map(q =>
+      `• [ID: ${q.id}] Topic: "${q.topic}" | Question: "${q.question}"`
     ).join('\n');
   }
 
   // Build pending drafts section
   let pendingDraftsSection = 'No active pending drafts.';
   if (pendingDrafts.length > 0) {
-    pendingDraftsSection = pendingDrafts.map(d =>
-      `• [ID: ${d.id}] Type: ${d.type} | Target: "${d.title || d.key || d.directive}" | Category/Slug: "${d.category || 'N/A'}/${d.slug || 'N/A'}" | Status: ${d.status}\n  Summary: ${d.changesSummary || 'Draft'}\n  Content Preview: ${(d.content || d.fact || d.directive || '').slice(0, 150)}...`
+    pendingDraftsSection = pendingDrafts.slice(-3).map(d =>
+      `• [ID: ${d.id}] Type: ${d.type} | Target: "${d.title || d.key || d.directive}" | Summary: ${d.changesSummary || 'Draft'}`
     ).join('\n');
   }
 
   // Build pending suggestions section
   let pendingSuggSection = 'No pending ticket suggestions.';
   if (pendingSuggestions.length > 0) {
-    pendingSuggSection = pendingSuggestions.map(s =>
-      `• [ID: ${s.id}] Type: ${s.type} | Target: "${s.title || s.key}" | Category: "${s.category || 'N/A'}"\n  Trigger: "${s.triggerQuery}"`
+    pendingSuggSection = pendingSuggestions.slice(-3).map(s =>
+      `• [ID: ${s.id}] Target: "${s.title || s.key}" | Category: "${s.category || 'N/A'}"`
     ).join('\n');
   }
+
+  const overridesSummary = currentOverrides.map(o => `• [ID ${o.id}]: ${o.directive}`).join('\n') || 'None';
+  const lessonsSummary = Object.entries(currentLessons).map(([k, l]) => `• ${k}: ${l.fact}`).join('\n') || 'None';
 
   const systemPrompt = `You are the chief executive AI assistant and knowledge curator for the Boss / Creator of the Vertex Nodes Discord AI Support Bot.
 The Boss (@${username}) is sending you direct messages to teach you, resolve knowledge gaps, refine policies, review article drafts, and command overrides.
@@ -128,21 +135,21 @@ The Boss (@${username}) is sending you direct messages to teach you, resolve kno
 CURRENT KNOWLEDGE BASE STATE:
 =========================================
 1. ACTIVE DIRECTIVES & OVERRIDES (${currentOverrides.length}):
-${JSON.stringify(currentOverrides, null, 2)}
+${overridesSummary}
 
 2. ATOMIC LESSON FACTS (${Object.keys(currentLessons).length}):
-${JSON.stringify(currentLessons, null, 2)}
+${lessonsSummary}
 
 3. CATEGORIZED ARTICLES CATALOG:
 ${articlesCatalog}
 
-4. PENDING KNOWLEDGE GAP QUESTIONS FROM TICKETS (${pendingQuestions.length}):
+4. PENDING KNOWLEDGE GAP QUESTIONS (${pendingQuestions.length}):
 ${pendingGapsSection}
 
-5. PENDING SELF-LEARNING SUGGESTIONS (${pendingSuggestions.length}):
+5. PENDING SUGGESTIONS (${pendingSuggestions.length}):
 ${pendingSuggSection}
 
-6. ACTIVE INTERACTIVE DRAFTS (${pendingDrafts.length}):
+6. ACTIVE DRAFTS (${pendingDrafts.length}):
 ${pendingDraftsSection}
 =========================================
 
@@ -495,10 +502,10 @@ module.exports = {
       return message.reply({ embeds: [helpEmbed] });
     }
 
-    // 3. Fetch Recent DM Channel History (up to 15 messages) for rich context
+    // 3. Fetch Recent DM Channel History (up to 6 messages) for rich context
     let history = [];
     try {
-      const fetched = await message.channel.messages.fetch({ limit: 15 });
+      const fetched = await message.channel.messages.fetch({ limit: 6 });
       const sorted = Array.from(fetched.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
       // Exclude the current message since it's passed explicitly as userText
       const prior = sorted.filter(m => m.id !== message.id);
