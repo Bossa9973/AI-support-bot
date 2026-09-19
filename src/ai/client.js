@@ -154,7 +154,7 @@ async function createChatCompletion(params, options = {}) {
 
       // ─── 3b. HANDLE 413 REQUEST TOO LARGE / ITPM TOKEN LIMIT ─────────────────
       if (status === 413 || errMsg.includes('413') || errMsg.includes('Request too large') || errMsg.includes('ITPM') || errMsg.includes('reduce your message size')) {
-        const fallback = config.ai.fallbackModel || (config.ai.provider === 'groq' ? 'llama-3.1-8b-instant' : 'openrouter/free');
+        const fallback = config.ai.fallbackModel || (config.ai.provider === 'groq' ? 'groq/compound' : 'openrouter/free');
 
         // First attempt: aggressively trim messages history
         if (Array.isArray(requestParams.messages) && requestParams.messages.length > 2) {
@@ -201,7 +201,7 @@ async function createChatCompletion(params, options = {}) {
         }
 
         // If all retries on the current model are exhausted, try fallback model
-        const fallbackModel = config.ai.fallbackModel || (config.ai.provider === 'groq' ? 'llama-3.1-8b-instant' : 'openrouter/free');
+        const fallbackModel = config.ai.fallbackModel || (config.ai.provider === 'groq' ? 'groq/compound' : 'openrouter/free');
         if (requestParams.model !== fallbackModel) {
           console.warn(`[${context}] ⚠️ Rate limits or provider errors exhausted on ${requestParams.model}. Automatically falling back to ${fallbackModel}...`);
           requestParams.model = fallbackModel;

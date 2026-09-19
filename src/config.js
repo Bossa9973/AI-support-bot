@@ -61,7 +61,7 @@ if (explicitProvider === 'groq') {
 
 const maxTokens = parseInt(process.env.AI_MAX_TOKENS || process.env.MAX_TOKENS || '350', 10);
 const fallbackModel = process.env.AI_FALLBACK_MODEL || (selectedProvider === 'groq'
-  ? 'llama-3.1-8b-instant'
+  ? 'groq/compound-mini'
   : (selectedProvider === 'openrouter' ? 'openrouter/free' : 'nvidia/nemotron-3.5-lightning-30b-a3b'));
 
 let activeAIConfig;
