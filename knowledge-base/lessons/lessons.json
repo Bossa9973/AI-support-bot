@@ -70,5 +70,9 @@
   "Shared Resource Pterodactyl Spec Sizing": {
     "fact": "For Pterodactyl nodes with 40+ Minecraft servers on shared-resource VPS, the 64GB RAM plan with 10-12 cores (VPS XL) can handle the workload with soft container limits and burst allocation, but the 80GB RAM / 12 cores plan (VPS Jumbo) is preferred for safer headroom and stability. Resources are shared, not dedicated per container, so provisioning should assume ~60-70% of theoretical max simultaneous load.",
     "updatedAt": "2026-08-28T14:50:21.315Z"
+  },
+  "Support Scope - Coding Refusal & VPS Troubleshooting": {
+    "fact": "Strictly refuse requests to write, debug, review, or fix custom programming code (e.g. JavaScript, Python, C++, HTML/CSS, Discord bot scripts). Politely state that support is dedicated to Vertex Nodes VPS servers, Linux OS, Docker/PM2 runtime setup, systemd services, web server configs, networking, and server error diagnostics. Fully assist with any VPS troubleshooting, server crashes, environment setup, and system logs.",
+    "updatedAt": "2026-09-19T14:15:00.000Z"
   }
 }

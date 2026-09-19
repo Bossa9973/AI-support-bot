@@ -337,8 +337,8 @@ module.exports = {
     if (!isOwner) return;
 
     try {
-      message?.channel?.sendTyping?.().catch(() => {});
-    } catch (_) {}
+      message?.channel?.sendTyping?.().catch(() => { });
+    } catch (_) { }
 
     const content = message.content.trim();
 
@@ -444,8 +444,8 @@ module.exports = {
         return message.reply(`⚠️ Couldn't find suggestion \`${suggId}\`. Use \`!suggestions\` to see pending ones.`);
       }
       try {
-        message?.channel?.sendTyping?.().catch(() => {});
-      } catch (_) {}
+        message?.channel?.sendTyping?.().catch(() => { });
+      } catch (_) { }
       const answer = await answerSuggestionQuestion(suggestion, question);
       const embed = new EmbedBuilder()
         .setColor('#FEE75C')
