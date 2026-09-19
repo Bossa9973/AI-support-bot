@@ -134,18 +134,40 @@ module.exports = {
    * Dropdown Ticket Panel Embed (matches modern reference design).
    */
   createTicketPanel(guild = null) {
-    const guildName = guild?.name || 'Support';
-    const categoryListLines = TICKET_CATEGORIES.map(
-      (cat) => `### ${cat.emoji} ${cat.label}`
-    ).join('\n');
+    const guildName = guild?.name || 'Vertex Nodes';
+    const categoryLines = TICKET_CATEGORIES.map(
+      (cat) => `> ${cat.emoji} **${cat.label}**\n> *${cat.description}*`
+    ).join('\n\n');
 
     const embed = new EmbedBuilder()
       .setColor(BRAND_COLOR)
-      .setTitle('🎫 Ticket System')
+      .setAuthor({
+        name: `${guildName} • Support Desk & Service Portal`,
+        iconURL: guild?.iconURL?.({ dynamic: true, size: 128 }) || undefined
+      })
+      .setTitle('🎫 Open a Support Ticket')
       .setDescription(
-        `Please select a category below to create a ticket:\n\n${categoryListLines}`
+        `Welcome to the **${guildName}** support center. Select a category from the dropdown menu below to connect with **Eon**, our 24/7 AI infrastructure assistant, or our human staff team.\n\n` +
+        `**Support Categories:**\n${categoryLines}`
       )
-      .setFooter({ text: `${guildName} • Ticket System` })
+      .addFields([
+        {
+          name: '⚡ Instant AI Assistance',
+          value: 'Immediate answers for Linux, server runtimes (Node.js, Docker, PM2), networking, firewalls, and node operations.',
+          inline: true
+        },
+        {
+          name: '👥 Staff Escalation',
+          value: 'Hardware diagnostics, custom VPS orders, billing queries, and account management handled by our engineering team.',
+          inline: true
+        },
+        {
+          name: '⏱️ Response Times',
+          value: '• **AI Agent**: Instant\n• **Staff**: < 15–30 mins',
+          inline: true
+        }
+      ])
+      .setFooter({ text: `${guildName} • Select a category below to create your ticket` })
       .setTimestamp();
 
     let files = [];
@@ -202,18 +224,42 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(BRAND_COLOR)
-      .setTitle(`Support Ticket • #${formattedNumber}`)
+      .setAuthor({
+        name: `Support Ticket • #${formattedNumber}`
+      })
+      .setTitle(`${categoryData.emoji} ${categoryData.label}`)
       .setDescription(
         `${formattedGreeting}\n\n` +
-        `> **Selected Category**: ${categoryData.emoji} **${categoryData.label}**\n` +
-        `> Describe your issue or attach error logs/screenshots. Our AI assistant is active, and human staff can be paged at any time.`
+        `> **Category Focus**: *${categoryData.description}*\n` +
+        `> Provide your details, server name, or error logs below. Our AI support specialist **Eon** is actively monitoring this channel.`
       )
       .addFields([
-        { name: `${EMOJIS.user} Opened By`, value: `<@${ticketUser.id}>`, inline: true },
-        { name: '🏷️ Category', value: `${categoryData.emoji} ${categoryData.label}`, inline: true },
-        { name: '🤖 Eon', value: '`🟢 Active & Listening`', inline: true }
+        {
+          name: `${EMOJIS.user} Creator`,
+          value: `<@${ticketUser.id}>`,
+          inline: true
+        },
+        {
+          name: '🏷️ Ticket ID',
+          value: `\`#${formattedNumber}\``,
+          inline: true
+        },
+        {
+          name: '🤖 AI Agent',
+          value: '`🟢 Eon Online`',
+          inline: true
+        },
+        {
+          name: '💡 Fast Resolution Tips',
+          value: [
+            '• **Error Logs & Configs**: Wrap code, terminal output, or stack traces in \\`\\`\\` code blocks.',
+            '• **Images**: Drag and drop screenshots of your dashboard or terminal for instant visual analysis.',
+            '• **Human Staff**: Need an engineer? Click **Claim** or ask Eon to page staff at any time.'
+          ].join('\n'),
+          inline: false
+        }
       ])
-      .setFooter({ text: `Ticket #${formattedNumber} • Click Close when resolved` })
+      .setFooter({ text: `Ticket #${formattedNumber} • Click Close when your issue is resolved` })
       .setTimestamp();
 
     const closeBtn = new ButtonBuilder()
@@ -247,48 +293,53 @@ module.exports = {
     const normPriority = (priority || 'green').toLowerCase();
 
     let color = SUCCESS_COLOR;
-    let priorityBadge = `${EMOJIS.standard} [STANDARD INQUIRY] Priority: Low`;
-    let urgencyNote = 'Standard inquiry escalated for staff review or panel execution.';
+    let priorityBadge = `${EMOJIS.standard} Standard Escalation • Priority: Low`;
+    let urgencyNote = 'Standard ticket handed off for human staff review or admin execution.';
     let btnStyle = ButtonStyle.Success;
     let btnLabel = 'Claim Ticket';
 
     if (normPriority === 'purchase' || normPriority === 'sales') {
       color = BRAND_COLOR;
-      priorityBadge = `${EMOJIS.cart} [VPS PURCHASE / SALES ORDER] Priority: Sales Lead`;
-      urgencyNote = '💰 **SALES INQUIRY**: Customer is ready to purchase or configure a paid VPS plan. Admin/Sales review required!';
+      priorityBadge = `${EMOJIS.cart} VPS Purchase Lead • Sales Team`;
+      urgencyNote = 'Customer is inquiring about purchasing or configuring a paid VPS plan.';
       btnStyle = ButtonStyle.Success;
       btnLabel = 'Claim Purchase Ticket';
     } else if (normPriority === 'red' || normPriority === 'emergency' || normPriority === 'critical') {
       color = DANGER_COLOR;
-      priorityBadge = `${EMOJIS.emergency} [CRITICAL EMERGENCY] Priority: Emergency`;
-      urgencyNote = '🔥 **CRITICAL SEVERITY**: Outage, severe node failure, security issue, or data risk detected. Immediate engineer review required!';
+      priorityBadge = `${EMOJIS.emergency} CRITICAL EMERGENCY • Immediate Action`;
+      urgencyNote = 'Outage, hardware failure, security breach, or data risk detected. Immediate review required!';
       btnStyle = ButtonStyle.Danger;
       btnLabel = 'Claim Emergency Ticket';
     } else if (normPriority === 'yellow' || normPriority === 'orange' || normPriority === 'moderate' || normPriority === 'elevated') {
       color = WARNING_COLOR;
-      priorityBadge = `${EMOJIS.moderate} [ELEVATED PRIORITY] Priority: Moderate`;
-      urgencyNote = 'User has a non-destructive blocker, port/NAT routing request, or billing hurdle requiring staff assistance.';
+      priorityBadge = `${EMOJIS.moderate} Elevated Support • Staff Assistance`;
+      urgencyNote = 'User has a blocker, billing hurdle, or backend verification requiring staff access.';
       btnStyle = ButtonStyle.Primary;
       btnLabel = 'Claim Ticket';
     }
 
     const embed = new EmbedBuilder()
       .setColor(color)
+      .setAuthor({ name: 'Vertex Nodes • Staff Dispatch Alert' })
       .setTitle(priorityBadge)
       .setDescription(
         `${roleTag}\n\n` +
         `**📋 AI Briefing & Issue Summary:**\n` +
-        `> ${summary.replace(/\n/g, '\n> ')}\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
+        `> ${summary.replace(/\n/g, '\n> ')}`
       )
       .addFields([
         {
-          name: '📊 Priority Assessment',
-          value: urgencyNote,
+          name: '📊 Severity Assessment',
+          value: `• **Priority**: \`${normPriority.toUpperCase()}\`\n• **Status**: ${urgencyNote}`,
+          inline: false
+        },
+        {
+          name: '🎯 Recommended Staff Action',
+          value: 'Review conversation context above, check the user\'s panel status if needed, and click **Claim** below to take ownership.',
           inline: false
         }
       ])
-      .setFooter({ text: `Staff Dispatch • Priority: ${normPriority.toUpperCase()}` })
+      .setFooter({ text: `Staff Dispatch Center • Priority: ${normPriority.toUpperCase()}` })
       .setTimestamp();
 
     const claimBtn = new ButtonBuilder()
@@ -324,6 +375,7 @@ module.exports = {
   createCloseConfirmation() {
     const embed = new EmbedBuilder()
       .setColor(DANGER_COLOR)
+      .setAuthor({ name: 'Vertex Nodes • Support Desk' })
       .setTitle(`${EMOJIS.closeTicket} Confirm Ticket Closure`)
       .setDescription(
         'Are you sure you want to close this ticket?\n\n' +
@@ -355,12 +407,26 @@ module.exports = {
   createResolutionPrompt(userId) {
     const embed = new EmbedBuilder()
       .setColor(BRAND_COLOR)
+      .setAuthor({ name: 'Vertex Nodes • Support Quality Check' })
       .setTitle('❓ Did this solve your issue?')
       .setDescription(
-        `Hey <@${userId}>! Our AI assistant provided a solution above.\n\n` +
-        `Please let us know if your question or issue has been resolved so we can keep our support queue organized.`
+        `Hey <@${userId}>! Our AI support agent **Eon** provided a solution above.\n\n` +
+        `Please let us know if your question or issue has been resolved so we can keep our support queue organized:`
       )
-      .setFooter({ text: 'Auto-closes after 10 minutes of inactivity if resolved' });
+      .addFields([
+        {
+          name: '✅ Yes, Close Ticket',
+          value: 'Confirms your issue is resolved and automatically archives the chat transcript.',
+          inline: true
+        },
+        {
+          name: '💬 No, Need More Help',
+          value: 'Keeps this channel open for further troubleshooting or human staff assistance.',
+          inline: true
+        }
+      ])
+      .setFooter({ text: 'Auto-closes after 10 minutes of inactivity if resolved' })
+      .setTimestamp();
 
     const yesBtn = new ButtonBuilder()
       .setCustomId('ticket_resolve_yes')
@@ -376,7 +442,7 @@ module.exports = {
 
     const row = new ActionRowBuilder().addComponents(yesBtn, noBtn);
 
-    return { embeds: [embed], components: [row] };
+    return { content: `<@${userId}>`, embeds: [embed], components: [row] };
   },
 
   /**
@@ -385,13 +451,23 @@ module.exports = {
   createInactivityReminder(userId) {
     const embed = new EmbedBuilder()
       .setColor(WARNING_COLOR)
-      .setTitle('⏳ Inactivity Check & Auto-Close Warning')
+      .setAuthor({ name: 'Vertex Nodes • Ticket Queue Maintenance' })
+      .setTitle('⏳ Inactivity Check — Auto-Close in 5 Minutes')
       .setDescription(
-        `Hey <@${userId}>! Just checking in to make sure you're all set with your inquiry.\n\n` +
-        `• **Issue Resolved?** Click **Yes, Close Ticket** below.\n` +
-        `• **Still Need Help?** Simply reply in this channel or click **No, Need More Help**.\n\n` +
-        `⏰ *This ticket will automatically archive in **5 minutes** if no response is received.*`
+        `Hey <@${userId}>! Just checking in to make sure you're all set with your inquiry.`
       )
+      .addFields([
+        {
+          name: '⏰ Status',
+          value: 'This ticket will automatically archive in **5 minutes** if no response is received.',
+          inline: false
+        },
+        {
+          name: '⚡ How to Keep Open',
+          value: '• **Still Need Help?** Simply type a reply in this channel or click **No, Need More Help** below.\n• **All Done?** Click **Yes, Close Ticket** to archive and save your transcript.',
+          inline: false
+        }
+      ])
       .setFooter({ text: 'Automated Ticket Queue Maintenance' })
       .setTimestamp();
 
@@ -418,14 +494,23 @@ module.exports = {
   createClosedControls(closedByUserId) {
     const embed = new EmbedBuilder()
       .setColor(DARK_PANEL_COLOR)
+      .setAuthor({ name: 'Vertex Nodes • Ticket Archive' })
       .setTitle('🔒 Ticket Closed & Archived')
       .setDescription(
-        `This ticket was closed by <@${closedByUserId}>.\n\n` +
-        `**Staff Controls:**\n` +
-        `• **Re-open**: Restores user permissions and moves ticket back to active.\n` +
-        `• **Transcript**: Downloads a complete HTML transcript of the discussion.\n` +
-        `• **Delete**: Permanently removes this channel after a countdown.`
+        `This ticket was officially closed by <@${closedByUserId}>.`
       )
+      .addFields([
+        {
+          name: '📜 Transcript Saved',
+          value: 'A complete interactive HTML transcript has been generated and archived for your records.',
+          inline: false
+        },
+        {
+          name: '🛠️ Staff Controls',
+          value: '• **Re-open**: Restores user permissions and moves the ticket back to active status.\n• **Transcript**: Downloads a copy of the discussion transcript.\n• **Delete**: Permanently removes this channel after a countdown.',
+          inline: false
+        }
+      ])
       .setFooter({ text: 'Support Ticket System • Channel Locked' })
       .setTimestamp();
 

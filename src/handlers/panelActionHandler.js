@@ -23,6 +23,8 @@ const panelApi = require('../utils/panelApi');
 const db = require('../database/db');
 const config = require('../config');
 
+const embedBuilder = require('../utils/embedBuilder');
+
 // ── Regex to detect [ACTION: type|serverId|param] ─────────────────────────
 const ACTION_BLOCK_RE = /\[ACTION:\s*([a-z_]+)\|(\d+)\|([^\]]+)\]/gi;
 
@@ -84,18 +86,13 @@ async function postActionConfirmation(channel, ticket, action, serverName = '') 
 
   let actionLabel = '';
   let emoji = '⚙️';
-  let description = '';
 
   if (type === 'server_power') {
     actionLabel = ACTION_LABELS[param] || param;
     emoji = ACTION_EMOJIS[param] || '⚙️';
-    description = `Eon wants to **${actionLabel}** your server \`${serverName || `#${serverId}`}\`.\n\n` +
-                  `Click **Confirm** to proceed, or **Cancel** to abort.`;
   } else if (type === 'server_rename') {
     actionLabel = 'Rename';
     emoji = '✏️';
-    description = `Eon wants to **rename** server \`${serverName || `#${serverId}`}\` to \`${param}\`.\n\n` +
-                  `Click **Confirm** to proceed, or **Cancel** to abort.`;
   }
 
   // Encode the action into the button customId (max 100 chars)
@@ -123,12 +120,27 @@ async function postActionConfirmation(channel, ticket, action, serverName = '') 
   const row = new ActionRowBuilder().addComponents(confirmBtn, cancelBtn);
 
   const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle(`${emoji} Panel Action Request`)
-    .setDescription(description)
-    .setFooter({ text: 'Only the ticket owner or staff can confirm this action.' });
+    .setColor(embedBuilder.BRAND_COLOR || 0x00d285)
+    .setAuthor({ name: 'Vertex Nodes • Automated Server Control' })
+    .setTitle(`${emoji} Confirm Action: ${actionLabel}`)
+    .setDescription(
+      `Eon requested to execute an automated action on your server.\n\n` +
+      `Please confirm below to proceed with this operation.`
+    )
+    .addFields([
+      { name: '🖥️ Target Server', value: `\`${serverName || `#${serverId}`}\``, inline: true },
+      { name: '⚙️ Operation', value: `\`${actionLabel}\`${type === 'server_rename' ? ` ➔ \`${param}\`` : ''}`, inline: true },
+      { name: '👤 Owner', value: `<@${ownerId}>`, inline: true },
+      { name: '🛡️ Safety Verification', value: 'This action is safe and non-destructive. Click **Confirm** to execute, or **Cancel** to abort.', inline: false }
+    ])
+    .setFooter({ text: 'Only the ticket owner or staff can confirm this action.' })
+    .setTimestamp();
 
-  await channel.send({ embeds: [embed], components: [row] }).catch(console.error);
+  await channel.send({
+    content: `<@${ownerId}>`,
+    embeds: [embed],
+    components: [row]
+  }).catch(console.error);
 }
 
 // ── Execute confirmed action ───────────────────────────────────────────────
@@ -197,6 +209,13 @@ async function executeConfirmedAction(interaction, action) {
       .setColor(0xED4245)
       .setTitle('❌ Connection Error')
       .setDescription('Could not reach the panel right now. Please try again later.');
+  }
+
+  if (resultEmbed) {
+    resultEmbed
+      .setAuthor({ name: 'Vertex Nodes • Panel Operations' })
+      .setFooter({ text: 'Automated Infrastructure Management' })
+      .setTimestamp();
   }
 
   await interaction.editReply({ embeds: [resultEmbed] }).catch(console.error);

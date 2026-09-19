@@ -16,6 +16,7 @@ const { isStaffMember } = require('../utils/staffChecker');
 const panelApi = require('../utils/panelApi');
 const { formatPanelContext } = require('../utils/panelContextFormatter');
 const { processAiActions } = require('./panelActionHandler');
+const { formatDiscordTables, ensureUserPing } = require('../utils/tableFormatter');
 
 /**
  * Splits long message content into Discord-safe chunks (max 2000 chars each).
@@ -332,11 +333,16 @@ module.exports = {
         // 6d. Generate AI response
         let streamBuffer = '';
         let aiResult;
+        const userContext = {
+          id: message.author.id,
+          username: message.author.username,
+          displayName: message.member?.displayName || message.author.displayName || message.author.username
+        };
         try {
           aiResult = await generateSupportResponseStream(
             history,
             fullUserQuery,
-            message.author.username,
+            userContext,
             ticketState,
             imageUrls,
             (token) => { streamBuffer += token; }
@@ -362,12 +368,26 @@ module.exports = {
 
         // 6f. Send the complete reply if not empty
         if (visibleReply && visibleReply.trim()) {
+          // A. Convert raw markdown pipe tables (| col | col |) into clean aligned Discord monospace text blocks
+          visibleReply = formatDiscordTables(visibleReply);
+
+          // B. Ensure user is tagged with a real Discord ping (<@userId>) instead of static plain text @username
+          const targetUserId = ticket.userId || message.author.id;
+          const authorNames = [
+            message.author.username,
+            message.member?.displayName,
+            message.author.displayName,
+            ticket.username
+          ].filter(Boolean);
+          visibleReply = ensureUserPing(visibleReply, targetUserId, authorNames);
+
+          // C. Split message safely into Discord chunks and dispatch
           const finalChunks = splitMessage(visibleReply);
           for (const chunk of finalChunks) {
             if (chunk && chunk.trim()) {
               await message.channel.send({
                 content: chunk,
-                allowedMentions: { repliedUser: false }
+                allowedMentions: { users: [targetUserId], repliedUser: false }
               }).catch(console.error);
             }
           }

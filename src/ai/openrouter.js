@@ -90,6 +90,26 @@ Wrap all internal reasoning in <think>...</think> — it is automatically stripp
 - **No unnecessary headers**: For short-to-medium replies, skip headers entirely. Only use them for long structured guides or multi-section responses.
 - **Code blocks always**: Every command, file path, config value, error message, or package name goes in a code block. No exceptions.
 
+## DISCORD TABLE & DATA FORMATTING RULES
+Discord chat does NOT render markdown pipe tables (e.g. | col | col |). Raw markdown tables look broken, unaligned, and unreadable.
+Whenever presenting tabular data, pricing, specs, port mappings, or plan comparisons:
+- NEVER output raw markdown pipe tables (| col | col |).
+- PREFERRED FORMAT 1: Monospace Code Block Tables (recommended for multi-column data):
+  Use a \`\`\`text code block with aligned Unicode box borders or clean columns:
+  \`\`\`text
+  ┌──────────────┬──────────┬──────────┬──────────────┐
+  │ Plan         │ RAM      │ Cores    │ Storage      │
+  ├──────────────┼──────────┼──────────┼──────────────┤
+  │ VPS Nano     │ 13 GB    │ 4 Cores  │ 60 GB NVMe   │
+  │ VPS Micro    │ 21 GB    │ 6 Cores  │ 90 GB NVMe   │
+  │ VPS Medium   │ 32 GB    │ 8 Cores  │ 120 GB NVMe  │
+  └──────────────┴──────────┴──────────┴──────────────┘
+  \`\`\`
+- PREFERRED FORMAT 2: Clean structured bullet spec cards:
+  • 🔹 **VPS Nano** — \`13 GB RAM\` • \`4 Cores\` • \`60 GB NVMe\`
+  • 🔹 **VPS Micro** — \`21 GB RAM\` • \`6 Cores\` • \`90 GB NVMe\`
+  • 🔹 **VPS Medium** — \`32 GB RAM\` • \`8 Cores\` • \`120 GB NVMe\`
+
 ## TICKET CATEGORY ADHERENCE & OPENER PROTOCOLS
 The user selected a category when opening this ticket. Always anchor to it.
 
@@ -353,10 +373,15 @@ Does this help, or is there a specific error you're getting when trying to conne
  * Builds the standard support system prompt.
  * Uses pre-built static suffix to avoid re-allocating the same strings per request.
  */
-function buildStandardSystemPrompt(knowledgeBaseText, username, ticketContext = {}) {
+function buildStandardSystemPrompt(knowledgeBaseText, userParam, ticketContext = {}) {
   const categoryLabel = ticketContext.categoryLabel || 'General Support';
   const categoryDesc = ticketContext.categoryDescription || 'Assistance with server management and dashboard';
   const panelContext = ticketContext.panelContext || null;
+
+  // Extract user info
+  const userId = (typeof userParam === 'object' && userParam ? userParam.id : null) || ticketContext.userId || null;
+  const username = typeof userParam === 'string' ? userParam : (userParam?.username || 'User');
+  const userPingTag = userId ? `<@${userId}>` : `@${username}`;
 
   // Build optional panel context section
   const panelSection = panelContext
@@ -383,17 +408,21 @@ Rules for using [ACTION:] blocks:
   return `You are Eon, the AI support agent for Vertex Nodes.
 
 ## ACTIVE TICKET GROUND TRUTH:
-- User: @${username}
+- User Ping / Mention: ${userPingTag}
+- Username: @${username}
 - Selected Ticket Category: **${categoryLabel}**
 - Category Focus: ${categoryDesc}
 - CRITICAL INSTRUCTIONS:
   1. The user opened this ticket specifically for **${categoryLabel}**.
-  2. If the user sends a greeting (e.g. "hey", "hello", "hi"), greet them and immediately ask what they need help with regarding **${categoryLabel}**.
-  3. If the user asks what this ticket is about, answer directly: *"You opened this ticket under **${categoryLabel}** (${categoryDesc}). What question or issue do you have?"*
-  4. NEVER fabricate or hallucinate problems that were not mentioned in this chat (e.g. do not claim they have a suspended VM or billing dispute unless the Panel Context above explicitly shows it!).
-  5. Provide direct, accurate technical answers with working code/command blocks when applicable.
-  6. NEVER output internal staff briefings, outage reports, admin pings, or embed syntax in your user-visible reply.
-  7. SCOPE ENFORCEMENT — REFUSE CODING, FULLY TROUBLESHOOT VPS SERVERS:
+  2. USER MENTION & PING RULE:
+     Whenever you greet or address the user, ALWAYS use their exact Discord mention tag: ${userPingTag} (for example: "Hello ${userPingTag}," or "${userPingTag}, here is how you can resolve this:").
+     NEVER write plain text @${username} or @User when addressing them — you MUST use the clickable mention format ${userPingTag} so the user receives a Discord notification.
+  3. If the user sends a greeting (e.g. "hey", "hello", "hi"), greet them and immediately ask what they need help with regarding **${categoryLabel}**.
+  4. If the user asks what this ticket is about, answer directly: *"You opened this ticket under **${categoryLabel}** (${categoryDesc}). What question or issue do you have?"*
+  5. NEVER fabricate or hallucinate problems that were not mentioned in this chat (e.g. do not claim they have a suspended VM or billing dispute unless the Panel Context above explicitly shows it!).
+  6. Provide direct, accurate technical answers with working code/command blocks when applicable.
+  7. NEVER output internal staff briefings, outage reports, admin pings, or embed syntax in your user-visible reply.
+  8. SCOPE ENFORCEMENT — REFUSE CODING, FULLY TROUBLESHOOT VPS SERVERS:
      - You MUST REFUSE to write, edit, review, or debug custom application code (e.g. JavaScript, Python, C++, HTML/CSS, Discord bot scripts, web apps, homework). Politely decline and explain you specialize exclusively in VPS hosting and Linux server management.
      - You WILL FULLY TROUBLESHOOT the user's VPS server: Linux commands, packages, runtimes (Node.js, Python, Docker, PM2, Java), systemd services, web servers (Nginx/Caddy), ports, firewalls, resource usage, crash logs, and panel operations.
 
@@ -402,7 +431,7 @@ ${knowledgeBaseText}
 --- END KNOWLEDGE BASE ---
 ${panelSection}${STATIC_PROMPT_SUFFIX}
 
-User: @${username}`;
+User: ${userPingTag}`;
 }
 
 /**
@@ -588,8 +617,12 @@ function parseAIControlBlocks(rawReply, username = 'User', userQuery = '') {
 /**
  * Generates an AI response for a support ticket (fast direct call matching DM speed).
  */
-async function generateSupportResponse(conversationHistory, userQuery, username = 'User', ticketState = {}, imageUrls = []) {
+async function generateSupportResponse(conversationHistory, userQuery, userParam = 'User', ticketState = {}, imageUrls = []) {
   const client = getClient();
+  const userId = (typeof userParam === 'object' && userParam ? userParam.id : null) || ticketState.userId || null;
+  const username = typeof userParam === 'string' ? userParam : (userParam?.username || 'User');
+  const userPingTag = userId ? `<@${userId}>` : `@${username}`;
+
   if (!client) {
     return {
       reply: "AI support is in setup mode. A human staff member will assist you shortly.",
@@ -631,18 +664,19 @@ ${urgencyNote}
 - Tone: Direct, technical, no emojis, no customer service pleasantries.
 
 ## RULES:
-1. If the user indicates their issue is solved or asks to close the ticket:
+1. When addressing the user, use their Discord ping tag: ${userPingTag}
+2. If the user indicates their issue is solved or asks to close the ticket:
    Acknowledge directly and append:
    [CLOSE_TICKET]
    REASON: <one sentence summary>
    [/CLOSE_TICKET]
-2. If the user shares an important technical update:
+3. If the user shares an important technical update:
    [REPING]
    PRIORITY: <RED|YELLOW|GREEN>
    UPDATE: <one sentence>
    [/REPING]
 
-User: @${username}`;
+User: ${userPingTag}`;
 
     const messages = [{ role: 'system', content: holdingSystemPrompt }];
     if (Array.isArray(conversationHistory)) {
@@ -704,11 +738,12 @@ User: @${username}`;
   }
 
   // ─── STANDARD SUPPORT MODE ────────────────────────────────────────────────────
-  const systemPrompt = buildStandardSystemPrompt(knowledgeBaseText, username, {
+  const systemPrompt = buildStandardSystemPrompt(knowledgeBaseText, userParam, {
     category,
     categoryLabel,
     categoryDescription,
-    panelContext // injected when panel integration is enabled
+    panelContext, // injected when panel integration is enabled
+    userId
   });
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -753,13 +788,13 @@ User: @${username}`;
 async function generateSupportResponseStream(
   conversationHistory,
   userQuery,
-  username = 'User',
+  userParam = 'User',
   ticketState = {},
   imageUrls = [],
   onChunk = null
 ) {
   // Direct fast completion — panelContext is forwarded via ticketState
-  return generateSupportResponse(conversationHistory, userQuery, username, ticketState, imageUrls);
+  return generateSupportResponse(conversationHistory, userQuery, userParam, ticketState, imageUrls);
 }
 
 module.exports = {

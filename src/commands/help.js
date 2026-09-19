@@ -8,7 +8,8 @@ module.exports = {
 
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setColor(config.tickets.embedColor || '#5865F2')
+      .setColor(config.tickets.embedColor || '#00d285')
+      .setAuthor({ name: 'Vertex Nodes • Support Desk & Documentation' })
       .setTitle('🛡️ Support Desk • Commands & Capabilities')
       .setDescription(
         'Welcome to the **Support System**. Below is the complete directory of slash commands, automated AI capabilities, and ticket controls.'
